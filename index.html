@@ -2186,7 +2186,7 @@ function drawPanel() {
   }
   for (const s of [1, -1]) {
     g.fillStyle = 'rgba(120,140,128,0.45)'; g.fillRect(PX(s * 960), PY(-33.75), PX(s * 1260) - PX(s * 960), PY(-38) - PY(-33.75));
-    g.fillStyle = '#e6f2ea'; g.textAlign = 'center'; g.fillText(s > 0 ? 'EAST YARD · GOODS SHED' : 'WEST YARD · GOODS SHED', (PX(s * 960) + PX(s * 1260)) / 2, PY(-36) + 4);
+    g.fillStyle = '#e6f2ea'; g.textAlign = 'center'; g.fillText(s > 0 ? 'EAST YARD · GOODS SHED' : 'WEST YARD · GOODS SHED', (PX(s * 960) + PX(s * 1260)) / 2, PY(-38) - 2);
   }
   // track
   g.lineCap = 'round'; g.lineWidth = 3; g.strokeStyle = '#b8c9bf';
@@ -2195,7 +2195,7 @@ function drawPanel() {
   g.font = 'bold 10px Segoe UI'; g.fillStyle = '#e6f2ea'; g.textAlign = 'left';
   for (const c of CORR) { g.fillText(c.k, 4, PY(c.z) + 4); }
   g.textAlign = 'right'; for (const c of CORR) g.fillText(c.k, PW - 4, PY(c.z) + 4);
-  for (const [n, z] of Object.entries(LINE_Z)) { g.textAlign = 'center'; g.fillStyle = '#9fd0b5'; if (+n > 8) for (const s of [1, -1]) g.fillText(+n === GOODS_LINE ? 'GOODS' : 'Y' + (n - 8), PX(s * 1285), PY(z) - 3); else g.fillText('L' + n + (LINE_PF[n] ? ' PF' + LINE_PF[n] : ''), PX(-190), PY(z) - 3); }
+  for (const [n, z] of Object.entries(LINE_Z)) { g.textAlign = 'center'; g.fillStyle = '#9fd0b5'; if (+n > 8) { const x0 = SEGS.find(sg => sg.z === z && sg.x0 > 0).x0; g.textAlign = 'right'; g.fillText(+n === GOODS_LINE ? 'GOODS' : 'Y' + (n - 8), PX(x0) - 4, PY(z) + 3); g.textAlign = 'left'; g.fillText(+n === GOODS_LINE ? 'GOODS' : 'Y' + (n - 8), PX(-x0) + 4, PY(z) + 3); } else g.fillText('L' + n + (LINE_PF[n] ? ' PF' + LINE_PF[n] : ''), PX(-190), PY(z) - 3); }
   // predicted paths (where each train will go with the points as set)
   for (const t of trains) {
     if (t.stabled || t.crashed || !t.pred.legs.length) continue;
