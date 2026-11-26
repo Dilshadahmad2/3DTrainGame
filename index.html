@@ -31,7 +31,10 @@ html,body{margin:0;height:100%;overflow:hidden;background:#000;font-family:'Sego
 .empty{color:var(--mut);font-size:12px;padding:4px 6px 8px}
 .tcard{padding:8px 10px;border-radius:8px;background:rgba(255,255,255,0.045);border:1px solid transparent;cursor:pointer}
 .tcard:hover{background:rgba(255,255,255,0.08)}
-.tcard.sel{border-color:var(--acc)}
+.tcard.sel{border:2px solid var(--acc);background:rgba(255,179,0,0.16);box-shadow:0 0 0 3px rgba(255,179,0,0.25),0 0 18px rgba(255,179,0,0.45);animation:selpulse 1.6s ease-in-out infinite}
+.tcard.sel .tnum .no{background:var(--acc);color:#111;padding:0 6px;border-radius:4px}
+.tcard.sel .tnum::before{content:'▶ SELECTED ';color:var(--acc);font-weight:700;font-size:11px}
+@keyframes selpulse{50%{box-shadow:0 0 0 3px rgba(255,179,0,0.45),0 0 26px rgba(255,179,0,0.7)}}
 .tnum{font-weight:700;font-size:13px}
 .tnum span{font-weight:400;color:var(--mut);margin-left:6px;font-size:12px}
 .tinfo{font-size:11px;color:var(--mut);margin-top:2px}
@@ -1200,7 +1203,7 @@ function buildLocoProto(liv) {
   g.add(b.build());
   const spr = new THREE.Sprite(headGlowMat); spr.name = 'headGlow'; spr.position.set(-0.1, 4.06, 0); spr.scale.setScalar(2.5); g.add(spr);
   const pool = new THREE.Mesh(poolGeo, poolMat); pool.position.set(22.5, 0.03, 0); pool.rotation.x = -Math.PI / 2; g.add(pool);
-  g.userData = { len: 20, rear: -19.5 };
+  g.userData = { len: 20, rear: -19.5, loco: true };
   return g;
 }
 
@@ -1295,7 +1298,34 @@ function buildWagonProto() {
   return g;
 }
 
+// WDS-6 diesel yard shunter: long hood + end cab, yellow/maroon livery
+function buildShunterProto() {
+  const g = new THREE.Group(), b = new Builder();
+  const yel = std(0xf2b705, { roughness: 0.5, metalness: 0.2 }), mar = std(0x7b2a24, { roughness: 0.5 }), grey = std(0x6b7075);
+  b.box(MAT.darkMetal, -7, 1.15, 0, 13.6, 0.45, 2.9);                    // underframe
+  b.box(yel, -8.4, 2.45, 0, 9.6, 2.2, 2.3);                              // long hood
+  b.box(mar, -8.4, 1.55, 0, 9.62, 0.25, 2.32);
+  for (let x = -4.4; x > -12.8; x -= 1.4) for (const z of [-1.16, 1.16]) b.box(grey, x, 2.6, z, 0.9, 1.2, 0.03);
+  b.box(yel, -1.9, 2.95, 0, 3.0, 3.2, 2.9);                              // cab
+  b.box(mar, -1.9, 4.6, 0, 3.2, 0.18, 3.0);
+  for (const z of [-1.46, 1.46]) b.box(MAT.glass, -1.9, 3.6, z, 2.2, 0.9, 0.03);
+  b.box(MAT.glass, -0.39, 3.6, 0, 0.03, 0.9, 2.3); b.box(MAT.glass, -3.41, 3.6, 0, 0.03, 0.9, 2.3);
+  b.cyl(MAT.black, -9, 3.85, 0, 0.18, 0.6);                              // exhaust stack
+  b.box(yel, -13.5, 2.0, 0, 0.6, 1.3, 2.3);                              // short hood end
+  for (const [hx, s] of [[-0.35, 1], [-13.85, -1]]) {
+    for (const z of [-0.5, 0.5]) b.add(new THREE.CircleGeometry(0.14, 14), MAT.headlight, M(hx + s * 0.02, hx > -1 ? 4.2 : 2.35, z, 0, s * Math.PI / 2, 0));
+    for (let i = 0; i < 5; i++) b.box(i % 2 ? MAT.black : yel, hx, 1.15, -1.2 + i * 0.6, 0.06, 0.45, 0.6);   // wasp stripes
+  }
+  for (const z of [-1.5, 1.5]) b.box(MAT.yellow, -7, 1.75, z, 12.5, 0.05, 0.05);
+  bogie(b, -3.4, 3, 1.5, 0.5); bogie(b, -10.6, 3, 1.5, 0.5);
+  buffers(b, -0.4, 1); buffers(b, -13.9, -1);
+  g.add(b.build());
+  const spr = new THREE.Sprite(headGlowMat); spr.name = 'headGlow'; spr.position.set(-0.1, 4.2, 0); spr.scale.setScalar(2); g.add(spr);
+  g.userData = { len: 14.3, rear: -13.9, loco: true };
+  return g;
+}
 const PROTO = {
+  shunter: buildShunterProto(),
   locoRed: buildLocoProto({ base: '#b8261c', stripe: '#f1e4c0', num: '30217' }),
   locoBlue: buildLocoProto({ base: '#2f5c8f', stripe: '#f2f2f2', num: '31044' }),
   SL: buildCoachProto('SL'), AC: buildCoachProto('AC'), GEN: buildCoachProto('GEN'), SLR: buildCoachProto('SLR'),
@@ -1411,14 +1441,17 @@ const TYPES = {
   passenger: { vmax: 22, acc: 0.55, dwell: 20, label: 'Passenger' },
   goods: { vmax: 17, acc: 0.22, dwell: 0, label: 'Goods' },
   stabled: { vmax: 0, acc: 0, dwell: 0, label: 'Stabled rake' },
+  shunter: { vmax: 8.4, acc: 0.3, dwell: 0, label: 'Yard shunter' },
+  light: { vmax: 16, acc: 0.45, dwell: 0, label: 'Light engine' },
 };
+const ENGINE_TYPES = ['shunter', 'light'];
 const CITIES = ['Howrah', 'New Delhi', 'Mumbai CSMT', 'Chennai Central', 'Patna', 'Lucknow', 'Bhopal', 'Nagpur', 'Guwahati', 'Jaipur', 'Amritsar', 'Puri', 'Varanasi', 'Ahmedabad', 'Bengaluru', 'Secunderabad', 'Jammu Tawi', 'Kanpur Central', 'Prayagraj', 'Gorakhpur', 'Ranchi', 'Indore', 'Pune', 'Visakhapatnam', 'Darbhanga', 'Sealdah', 'Bhubaneswar', 'Dehradun'];
 const TOWNS = ['Rampur', 'Sitapur', 'Basti', 'Sonepur', 'Kheda', 'Mahua', 'Barauni', 'Hajipur', 'Chhapra', 'Siwan', 'Ballia', 'Mau', 'Ghazipur', 'Buxar'];
 const EXP_CATS = [['Rajdhani Express', '12'], ['Shatabdi Express', '12'], ['Duronto Express', '12'], ['Superfast Express', '12'], ['Sampark Kranti Express', '12'], ['Garib Rath Express', '12'], ['Humsafar Express', '22'], ['Jan Shatabdi Express', '12'], ['Mail', '1'], ['Express', '1'], ['Intercity Express', '1']];
 const NAMED = ['Ganga Sagar Express', 'Kashi Vishwanath Express', 'Mahabodhi Express', 'Brahmaputra Mail', 'Kalinga Utkal Express', 'Godavari Express', 'Narmada Express', 'Vaishali Express', 'Purushottam Express', 'Saryu Yamuna Express', 'Tamil Nadu Express', 'Gitanjali Express', 'Marudhar Express', 'Poorva Express'];
 const JOB_LABEL = { stop: 'Stops here', through: 'Runs through', terminate: 'Terminates here', originate: 'Starts from here', unload: 'Unload at goods shed', stable: 'Stable in yard', none: '' };
 function defaultExpLine(t) {
-  if (t.type === 'goods') return t.job === 'unload' ? GOODS_LINE : t.job === 'stable' ? 9 + Math.floor(Math.random() * 3) : pickR([1, 7, 8]);
+  if (t.type === 'goods') return t.job === 'unload' ? GOODS_LINE : t.job === 'stable' ? pickR([9, 11]) : pickR([1, 7, 8]);
   return pickR([2, 3, 4, 5, 6]);
 }
 const lineShort = n => LINE_PF[n] ? 'PF ' + LINE_PF[n] : n === GOODS_LINE ? 'Goods' : n > 8 ? 'Y' + (n - 8) : 'L' + n;
@@ -1433,6 +1466,8 @@ function pickJob(type) {
 }
 function makeTrainName(type, job) {
   if (type === 'stabled') return { number: 'STB', name: 'Stabled rake' };
+  if (type === 'shunter') return { number: 'WDS6-' + (36000 + Math.floor(Math.random() * 999)), name: 'Yard shunter' };
+  if (type === 'light') return { number: 'LE', name: 'Light engine' };
   if (type === 'goods') return { number: 'N-' + digits(4), name: pickR(['BOXN coal rake', 'BCN cement rake', 'BOXN iron ore rake', 'BCNHL food grain rake', 'BRN steel coil rake']) + (job === 'unload' ? ' — for goods shed' : job === 'stable' ? ' — to be stabled in yard' : '') };
   const here = SN.en.trim();
   if (type === 'passenger') {
@@ -1458,6 +1493,7 @@ const CONSIST = {
   passenger: ['locoRed', 'SLR', 'GEN', 'GEN', 'GEN', 'GEN', 'GEN', 'GEN', 'SLR'],
   goods: ['locoBlue', ...Array(20).fill('BOXN')],
   stabled: Array(8).fill('BOXN'),
+  shunter: ['shunter'],
 };
 const state = { running: false, paused: false, speed: 1, time: 6 * 3600, score: 0, handled: 0, delay: 0, nextSpawn: 4, first: true };
 const trains = [];
@@ -1465,6 +1501,9 @@ let selected = null;
 const XLIM = 12.5;          // 45 km/h over crossovers
 const DESPAWN_U = 2700;
 
+const mirrorLegs = legs => legs.slice().reverse().map(g => ({ p0: -g.p1, p1: -g.p0, za: g.zb, zb: g.za, curve: g.curve, c: g.c }));
+const copyLegs = legs => legs.map(g => ({ ...g }));
+function makeCars(keys) { return keys.map(k => { const obj = PROTO[k].clone(); scene.add(obj); return { obj, len: PROTO[k].userData.len }; }); }
 class Train {
   constructor(type, dir, z, startU, opts = {}) {
     this.type = type; this.cfg = TYPES[type]; this.dir = dir; this.stabled = type === 'stabled';
@@ -1473,7 +1512,8 @@ class Train {
     const nm = makeTrainName(type, this.job); this.number = nm.number; this.name = nm.name;
     this.expLine = this.stabled ? null : (opts.expLine ?? defaultExpLine(this));
     this.schedArr = null; this.schedDep = null; this.actArr = null;
-    this.cars = []; let off = 0; const list = CONSIST[type];
+    this.cars = []; let off = 0; const list = opts.cars ? [] : CONSIST[type];
+    if (opts.cars) for (const c of opts.cars) { this.cars.push({ obj: c.obj, off, len: c.len }); off += c.len; }
     list.forEach((k, i) => {
       const obj = PROTO[k].clone(); scene.add(obj);
       const len = PROTO[k].userData.len;
@@ -1484,8 +1524,8 @@ class Train {
       }
       this.cars.push({ obj, off, len }); off += len;
     });
-    this.length = off; this.locoObj = this.cars[0].obj;
-    this.headSprite = this.cars[0].obj.getObjectByName('headGlow');
+    this.length = off; this.locoObj = this.cars.find(c => c.obj.userData.loco)?.obj || null;
+    this.headSprite = this.locoObj?.getObjectByName('headGlow');
     this.startZ = z; this.resetTo(startU, z);
     this.v = this.stabled ? 0 : this.cfg.vmax * 0.85;
     this.halted = false; this.dwell = 0; this.dwellDone = false; this.passed = new Set(); this.ranThrough = new Set();
@@ -1506,14 +1546,70 @@ class Train {
   canReverse() { return !this.stabled && !this.crashed && !this.terminated && this.v < 0.3 && !(this.yardT > 0) && !(this.holdT > 0) && !(this.halted && !this.dwellDone); }
   reverse() {
     const L = this.length;
-    this.legs = this.legs.slice().reverse().map(g => ({ p0: -g.p1, p1: -g.p0, za: g.zb, zb: g.za, curve: g.curve, c: g.c }));
+    this.legs = mirrorLegs(this.legs);
     const last = this.curLeg; if (!last.curve) last.p1 = Infinity;
     this.p = L - this.p; this.dir = -this.dir; this.v = 0;
-    this.cars.reverse(); let off = 0; for (const c of this.cars) { c.off = off; off += c.len; }
+    this.cars.reverse(); this.relink();
     this.passed = new Set(); this.ranThrough = new Set(); this.waitSig = null; this.blockedBy = null;
-    this.shunting = !this.shunting;
-    this.pred = predictFrom(this.curLeg.za, this.p, this.dir, 1600, this.curLeg.curve ? this.curLeg : null);
+    this.updateShunting(); this.repredict();
     this.sync();
+  }
+  relink() { let off = 0; for (const c of this.cars) { c.off = off; off += c.len; } this.length = off; }
+  repredict() { this.pred = predictFrom(this.curLeg.za, this.p, this.dir, 1600, this.curLeg.curve ? this.curLeg : null); }
+  // loco at the back = propelling = shunting speed
+  updateShunting() { this.shunting = !!this.locoObj && this.cars[0].obj !== this.locoObj; }
+  get isEngine() { return ENGINE_TYPES.includes(this.type); }
+  // ---------- coupling ----------
+  // a standing rake whose near end is just ahead of this train's front, on the same track
+  couplable() {
+    if (!this.locoObj || this.crashed || this.stabled || this.v > 0.3 || this.yardT > 0) return null;
+    const d = this.dir, zA = p => legZ(this.pred.legs, p);
+    for (const o of trains) {
+      if (o === this || !o.stabled) continue;
+      const nearP = Math.min(o.front * d, o.tail * d), gap = nearP - this.p;
+      if (gap < -1 || gap > 12) continue;
+      if (Math.abs(o.zOf(nearP * d) - zA(nearP)) > 0.8) continue;
+      return o;
+    }
+    return null;
+  }
+  couple(o) {
+    const d = this.dir, same = o.dir === d;
+    const nearP = Math.min(o.front * d, o.tail * d), farP = Math.max(o.front * d, o.tail * d);
+    const mine = copyLegs(this.legs).filter(g => g.p0 < nearP);
+    if (mine.length && !mine[mine.length - 1].curve) mine[mine.length - 1].p1 = nearP;
+    const theirs = (same ? copyLegs(o.legs) : mirrorLegs(o.legs)).filter(g => g.p1 > nearP);
+    if (theirs.length && !theirs[0].curve) theirs[0].p0 = nearP;
+    this.legs = [...mine, ...theirs]; if (!this.curLeg.curve) this.curLeg.p1 = Infinity;
+    const rc = (same ? o.cars : o.cars.slice().reverse()).map(c => ({ obj: c.obj, off: 0, len: c.len }));
+    this.cars = [...rc, ...this.cars]; this.relink(); this.p = farP; this.v = 0;
+    if (this.type === 'light') {
+      this.type = o.rakeType || 'goods'; this.cfg = TYPES[this.type];
+      const nm = makeTrainName(this.type, 'through'); this.number = nm.number;
+      this.name = `${o.name.replace(/ — .*/, '')} (ex-yard)`;
+    } else if (this.type === 'shunter') this.name = `${this.baseName || this.name} + ${o.cars.length} vehicles`;
+    this.exYard = this.exYard || o.inYard || o.wasYard;
+    this.job = 'through'; this.halts = false; this.jobDone = true; this.yardDone = true; this.dwellDone = true; this.expLine = 0;
+    this.passed = new Set(); this.ranThrough = new Set(); this.stopReq = true;
+    const i = trains.indexOf(o); if (i >= 0) trains.splice(i, 1); if (selected === o) selected = this;
+    this.updateShunting(); this.repredict(); this.sync();
+  }
+  canUncouple() { return this.canReverse() && !!this.locoObj && this.cars.length > 1; }
+  uncouple() {
+    const li = this.cars.findIndex(c => c.obj === this.locoObj), atFront = li === 0;
+    const loco = this.cars[li], rest = this.cars.filter((_, i) => i !== li);
+    const rake = new Train('stabled', this.dir, 0, 0, { cars: rest });
+    rake.legs = copyLegs(this.legs); rake.p = atFront ? this.p - loco.len : this.p;
+    rake.name = `${this.name.replace(/ — .*/, '').replace(/ \(ex-yard\)$/, '')} — stabled`; rake.rakeType = ENGINE_TYPES.includes(this.type) ? (this.rakeType || 'goods') : this.type;
+    rake.inYard = YARD_LINES.includes(Z_LINE[Math.round(rake.zOf(rake.front))]); rake.sync();
+    if (!atFront) this.p -= this.length - loco.len;
+    this.cars = [{ obj: loco.obj, off: 0, len: loco.len }]; this.relink();
+    if (this.type !== 'shunter') { this.rakeType = rake.rakeType; this.type = 'light'; this.cfg = TYPES.light; this.name = `Light engine (ex ${this.number})`; }
+    else this.name = this.baseName || this.name;
+    this.job = 'none'; this.halts = false; this.expLine = 0; this.dwellDone = true; this.exYard = false; this.stopReq = true; this.v = 0;
+    this.noCrash = rake; rake.noCrash = this;
+    trains.push(rake); this.updateShunting(); this.repredict(); this.sync();
+    return rake;
   }
   get eta() { return this.actArr ?? state.time + Math.max(0, -this.p) / Math.max(this.v, 8) + (this.waitSig ? 60 : 0); }
   recordArrival(line) {
@@ -1530,7 +1626,12 @@ class Train {
   get pos() { return this.p; }
   get curLeg() { return this.legs[this.legs.length - 1]; }
   zOf(x) { return legZ(this.legs, x * this.dir); }
-  bodyPoints(step = 8) { const pts = []; for (let k = 0; k <= this.length + 0.1; k += step) { const x = (this.p - Math.min(k, this.length)) * this.dir; pts.push([x, this.zOf(x)]); } return pts; }
+  bodyPoints(step = 8) {
+    const pts = []; let k = 0;
+    for (; k < this.length; k += step) { const x = (this.p - k) * this.dir; pts.push([x, this.zOf(x)]); }
+    const x = (this.p - this.length) * this.dir; pts.push([x, this.zOf(x)]);   // always include the exact tail
+    return pts;
+  }
   // every coach sits on the track under it, so the train bends through each crossover
   sync() {
     for (const c of this.cars) {
@@ -1565,8 +1666,13 @@ class Train {
     if (this.stabled || this.crashed) return;
     if (this.yardT > 0) {
       this.v = 0; this.yardT -= h; this.status = `${this.yardMsg} · ${Math.ceil(this.yardT)} s`; this.statusCls = 'info';
+      if (this.yardT <= 0 && this.job === 'stable' && this.jobDone && this.locoObj && this.cars.length > 1) {
+        const yl = Z_LINE[Math.round(this.zOf(this.front))], rake = this.uncouple();
+        log(`${this.number.replace(/^LE /, '')}: loco detached — rake left stabled on ${lineName(yl)} (${this.front > 0 ? 'East' : 'West'} yard). Light engine ${this.number} is waiting: press ▶ Go to send it away, or couple it again later to take the rake out.`, 'warn');
+        return;
+      }
       if (this.yardT <= 0) {
-        this.holdT = 20; this.shunting = false;
+        this.holdT = 20; this.updateShunting();
         const east = this.front > 0, out = (this.dir > 0) === east ? `via point ${east ? 308 : 408} to track A` : `via the lead (point ${east ? 301 : 401}) to Line 1`;
         log(`${this.number}: yard work finished — ready to leave the ${east ? 'East' : 'West'} yard towards the ${this.dir > 0 ? 'East' : 'West'} ${out}.`, 'warn');
       }
@@ -1597,12 +1703,15 @@ class Train {
     const dead = pred.legs.find(L => L.dead);
     if (dead && dead.p1 - this.p - 15 < stop) { stop = dead.p1 - this.p - 15; stopSig = null; }
     // driver stops behind anything standing on the path ahead (rear or head-on)
+    // (engines and shunting moves creep right up to a standing rake so they can couple to it)
+    const creep = this.isEngine || this.shunting;
     for (const o of trains) {
       if (o === this) continue;
+      const margin = creep && o.v < 0.3 ? 3 : 40;
       for (const [ox, oz] of o.bodyPoints(8)) {
         const gap = ox * d - this.p;
-        if (gap <= 0 || gap > 1600) continue;
-        if (Math.abs(zAhead(ox * d) - oz) < 1.6 && gap - 40 < stop) { stop = gap - 40; stopSig = null; blocker = o; }
+        if (gap <= -0.5 || gap > 1600) continue;
+        if (Math.abs(zAhead(ox * d) - oz) < 1.6 && gap - margin < stop) { stop = Math.max(0, gap - margin); stopSig = null; blocker = o; }
       }
     }
     // platform halt
@@ -1706,7 +1815,9 @@ class Train {
     else if (this.p < -STARTER_U) { this.status = `Approaching · ${(Math.abs(this.p) / 1000).toFixed(2)} km out · ${Math.round(this.v * 3.6)} km/h`; this.statusCls = 'info'; }
     else if (this.p < STARTER_U) { this.status = `In station · ${lineNow ? lineName(lineNow) : '—'}`; this.statusCls = 'ok'; }
     else { this.status = `Departing · ${Math.round(this.v * 3.6)} km/h`; this.statusCls = 'ok'; }
-    if (this.stopReq && !(this.halted && !this.dwellDone)) { this.status = this.v < 0.2 ? 'Stopped on your order · ⇄ Reverse or ▶ Go' : `Braking on your order · ${Math.round(this.v * 3.6)} km/h`; this.statusCls = 'warn'; }
+    if (this.isEngine) { this.status = this.v < 0.2 ? `Standing on ${lineNow ? lineName(lineNow) : 'the line'}${this.couplable() ? ' · rake ahead — 🔗 Couple' : ''}` : `${this.cfg.label} moving · ${lineNow ? lineName(lineNow) : '—'} · ${Math.round(this.v * 3.6)} km/h`; this.statusCls = 'info'; }
+    if (this.v < 0.2 && this.couplable() && !this.isEngine) { this.status = 'Rake ahead — 🔗 Couple to it'; this.statusCls = 'info'; }
+    if (this.stopReq && !(this.halted && !this.dwellDone)) { this.status = this.v < 0.2 ? `Stopped on your order${lineNow ? ' · ' + lineName(lineNow) : ''} · ${this.couplable() ? '🔗 Couple · ' : ''}⇄ Reverse or ▶ Go` : `Braking on your order · ${Math.round(this.v * 3.6)} km/h`; this.statusCls = 'warn'; }
     else if (this.shunting && this.v > 0.2) this.status = `Shunting (reversed) · ${lineNow ? lineName(lineNow) : '—'} · ${Math.round(this.v * 3.6)} km/h`;
     this.sync();
   }
@@ -1775,7 +1886,7 @@ function corridorFree(c, dir) {
   return true;
 }
 function trySpawn() {
-  if (trains.filter(t => !t.stabled).length >= 6) return false;
+  if (trains.filter(t => !t.stabled && !t.isEngine).length >= 6) return false;
   if (!state.first && Math.random() < 0.22 && trySpawnOriginating()) return true;
   const r = Math.random(); const type = r < 0.42 ? 'express' : r < 0.75 ? 'passenger' : 'goods';
   const startU = state.first ? 2100 : 2600;
@@ -1790,6 +1901,18 @@ function trySpawn() {
     return true;
   }
   return false;
+}
+// each yard starts with a WDS-6 shunter on Yard 3 and an empty BOXN rake stabled on Yard 2
+function setupYards() {
+  for (const s of [1, -1]) {
+    const rake = new Train('stabled', s, LINE_Z[10], 0, { cars: makeCars(Array(14).fill('BOXN')) });
+    rake.resetTo(-1300, LINE_Z[10]); rake.p = 1300; rake.legs = [{ p0: -Infinity, p1: Infinity, za: LINE_Z[10], zb: LINE_Z[10] }];
+    rake.name = 'Empty BOXN rake — stabled'; rake.rakeType = 'goods'; rake.inYard = true; rake.sync();
+    const sh = new Train('shunter', -s, LINE_Z[10], 1330, { job: 'none', expLine: 0 });   // on Yard 2 beyond the rake, facing it
+    sh.v = 0; sh.stopReq = true; sh.flags.whistle = true; sh.baseName = sh.name = `${s > 0 ? 'East' : 'West'} yard shunter`; sh.sync();
+    trains.push(rake, sh);
+  }
+  log('Yards: each yard has a WDS-6 shunter and an empty BOXN rake on Yard 2. Shunter card: ▶ Go (it creeps up to the rake) → 🔗 Couple → ⇄ Reverse to haul it out through the far end and track A, or ▶ Go to propel it out via Line 1.', 'warn');
 }
 // stabled rakes standing on the corridor — you have to route trains around them
 function placeStabled() {
@@ -1817,9 +1940,15 @@ function checkCollisions() {
     const a = trains[i], b = trains[j];
     if (a.stabled && b.stabled) continue;
     if (a.crashed && b.crashed) continue;
-    if (a.maxX < b.minX - 5 || b.maxX < a.minX - 5) continue;
+    const apart = a.maxX < b.minX - 5 || b.maxX < a.minX - 5;
+    if (a.noCrash === b || b.noCrash === a) {          // just uncoupled from each other
+      if (a.maxX < b.minX - 10 || b.maxX < a.minX - 10) { if (a.noCrash === b) a.noCrash = null; if (b.noCrash === a) b.noCrash = null; }
+      continue;
+    }
+    if (apart) continue;
+    const tol = a.v + b.v < 1.5 ? 1.2 : 3;              // buffers touching at walking pace is not an accident
     const pa = a.bodyPoints(5), pb = b.bodyPoints(5);
-    if (pa.some(([x, z]) => pb.some(([x2, z2]) => Math.abs(x - x2) < 3 && Math.abs(z - z2) < 1.6))) { crash(a, b); return; }
+    if (pa.some(([x, z]) => pb.some(([x2, z2]) => Math.abs(x - x2) < tol && Math.abs(z - z2) < 1.6))) { crash(a, b); return; }
   }
 }
 
@@ -1834,12 +1963,15 @@ function simStep(h) {
     if (t.crashed && state.time > t.clearAt) { log(`Accident site cleared — ${t.number} removed.`); t.dispose(); trains.splice(i, 1); if (selected === t) selected = null; continue; }
     if (!t.stabled && t.p > DESPAWN_U) {
       let pts = Math.max(10, 100 - Math.round(t.delay / 2)), note = '';
+      if (t.exYard) { pts = 80; note = ' — rake taken out of the yard and despatched ✓'; }
+      else if (t.type === 'shunter') { pts = -20; note = ' — the yard shunter ran out of station limits!'; }
+      else if (t.type === 'light') { pts = 15; note = ' — light engine sent away'; }
       if (t.job === 'terminate' && !t.terminated) { pts = -50; note = ' — it should have terminated here!'; }
       if (t.job === 'unload' && !t.jobDone) { pts = -50; note = ' — it was not unloaded at the goods shed!'; }
       if (t.job === 'stable' && !t.jobDone) { pts = -50; note = ' — it was not stabled in the yard!'; }
       if (t.job === 'stop' && !t.halted) { pts -= 60; note = ' — it skipped its platform stop!'; }
       state.score += pts; state.handled++;
-      log(`${t.number} cleared the section. ${pts >= 0 ? '+' : ''}${pts}${t.delay > 1 ? ` (delayed ${fmtDur(t.delay)})` : ''}${note}`, pts > 0 && !note ? 'good' : 'bad');
+      log(`${t.number} cleared the section. ${pts >= 0 ? '+' : ''}${pts}${t.delay > 1 ? ` (delayed ${fmtDur(t.delay)})` : ''}${note}`, pts > 0 && (!note || note.includes('✓') || t.type === 'light') ? 'good' : 'bad');
       t.dispose(); trains.splice(i, 1); if (selected === t) selected = null;
     }
   }
@@ -1892,7 +2024,7 @@ function cardFor(t) {
   el.innerHTML = `<div class="tnum"><span class="no"></span><span class="nm"></span></div>
     <div class="tinfo"></div><div class="tstat"></div><div class="tsched"></div><div class="tdest"></div>
     <label class="pfl" data-act="none">Expected platform / line <select class="pfsel" data-act="none"></select></label>
-    <div class="tctl"><button class="btn sm" data-act="view">🎥 View</button><button class="btn sm" data-act="cab">🚆 Cab</button><button class="btn sm sigb" data-act="sig"></button><button class="btn sm" data-act="stop" title="Order the driver to stop / go on">⏹ Stop</button><button class="btn sm" data-act="rev" title="Change ends and shunt back (set the points first) — e.g. back into a yard">⇄ Reverse</button></div>
+    <div class="tctl"><button class="btn sm" data-act="view">🎥 View</button><button class="btn sm" data-act="cab">🚆 Cab</button><button class="btn sm sigb" data-act="sig"></button><button class="btn sm" data-act="stop" title="Order the driver to stop / go on">⏹ Stop</button><button class="btn sm" data-act="rev" title="Change ends and shunt back (set the points first) — e.g. back into a yard">⇄ Reverse</button><button class="btn sm" data-act="cpl" title="Couple to the standing rake just ahead">🔗 Couple</button><button class="btn sm" data-act="ucpl" title="Uncouple the engine — the rake stays standing here">✂ Uncouple</button></div>
     <div class="tpts"></div>`;
   const sel = el.querySelector('.pfsel');
   if (t.stabled) el.querySelector('.pfl').style.display = 'none';
@@ -1916,14 +2048,16 @@ function renderTrainList() {
   for (const [t, el] of cards) if (!trains.includes(t)) { el.remove(); cards.delete(t); }
   if (!trains.length) { if (!box.querySelector('.empty')) box.innerHTML = '<div class="empty">No trains in section. Next one is on its way…</div>'; return; }
   box.querySelector('.empty')?.remove();
-  const order = [...trains].sort((a, b) => (a.stabled - b.stabled));
+  const order = [...trains].sort((a, b) => ((b === selected) - (a === selected)) || (a.stabled - b.stabled) || (a.isEngine - b.isEngine));
   order.forEach((t, i) => {
     const el = cardFor(t);
     if (box.children[i] !== el) box.insertBefore(el, box.children[i] || null);
     el.classList.toggle('sel', t === selected);
     el.querySelector('.no').textContent = t.number;
     el.querySelector('.nm').textContent = t.name;
-    el.querySelector('.tinfo').textContent = t.stabled ? `Standing on track ${CORR.find(c => c.z === Math.round(t.zOf(t.front)))?.k ?? ''} · ${(Math.abs(t.front) / 1000).toFixed(2)} km ${t.front < 0 ? 'west' : 'east'}` :
+    const zNow = Math.round(t.zOf(t.front)), lnS = Z_LINE[zNow];
+    el.querySelector('.tinfo').textContent = t.stabled ? `${t.cars.length} vehicles · standing on ${lnS && Math.abs(t.front) < 1700 ? lineName(lnS) + (lnS > 8 ? ` (${t.front > 0 ? 'East' : 'West'} yard)` : '') : 'track ' + (CORR.find(c => c.z === zNow)?.k ?? '')} · ${(Math.abs(t.front) / 1000).toFixed(2)} km ${t.front < 0 ? 'west' : 'east'} · couple an engine to move it` :
+      t.isEngine ? `${t.cfg.label} · ${t.dir > 0 ? 'facing East' : 'facing West'} · ${Math.round(t.v * 3.6)} km/h · ${t.front > 0 ? 'East' : 'West'} side` :
       `${t.cfg.label} · ${JOB_LABEL[t.job]} · ${t.dir > 0 ? 'W → E' : 'E → W'} · ${Math.round(t.v * 3.6)} km/h${t.delay > 1 ? ` · delay ${fmtDur(t.delay)}` : ''}`;
     const st = el.querySelector('.tstat'); st.textContent = t.status; st.className = 'tstat ' + t.statusCls;
     const dest = t.stabled ? '' : t.dest ? `Points lead to → ${lineName(t.dest)} (${lineKind(t.dest)})` : (t.p < 0 ? 'Points lead to → no station line!' : '');
@@ -1948,6 +2082,11 @@ function renderTrainList() {
     stb.style.display = rvb.style.display = t.stabled || t.crashed ? 'none' : '';
     stb.textContent = t.stopReq ? '▶ Go' : '⏹ Stop'; stb.classList.toggle('on', !!t.stopReq);
     rvb.disabled = !t.canReverse(); rvb.style.opacity = rvb.disabled ? 0.45 : 1;
+    const cpb = el.querySelector('[data-act="cpl"]'), ucb = el.querySelector('[data-act="ucpl"]');
+    cpb.style.display = !t.stabled && t.locoObj && t.couplable() ? '' : 'none';
+    ucb.style.display = !t.stabled && t.locoObj && t.cars.length > 1 ? '' : 'none';
+    ucb.disabled = !t.canUncouple(); ucb.style.opacity = ucb.disabled ? 0.45 : 1;
+    el.querySelector('.pfl').style.display = t.stabled || t.isEngine || t.exYard ? 'none' : '';
     // facing points ahead: set the route right from here
     const facing = t.stabled ? [] : t.pred.facing.filter(f => f.p - t.p < 1400).slice(0, 6);
     const sig = facing.map(f => f.c.id + POINTS[f.c.id]).join(',');
@@ -1976,6 +2115,20 @@ $('trains').addEventListener('click', e => {
     t.reverse(); t.stopReq = false; horn(t, 0.6); beep(700);
     log(`${t.number}: driver changed ends — now shunting towards the ${t.dir > 0 ? 'East' : 'West'} at 30 km/h. Check the points ahead!`, 'warn');
     renderTrainList(); return;
+  }
+  if (act === 'cpl') {
+    if (!state.running) return;
+    const o = t.couplable(); if (!o) { toast('No standing rake right ahead to couple to'); beep(180); return; }
+    const n = o.cars.length; t.couple(o); cards.get(o)?.remove(); cards.delete(o); beep(300); setTimeout(() => beep(420), 120);
+    log(`🔗 ${t.number} coupled to ${n} vehicles (${o.name.replace(/ — .*/, '')}). ${t.shunting ? 'Engine is at the back — ⇄ Reverse to haul it, or ▶ Go to propel.' : 'Press ▶ Go when the route is set.'}`, 'good');
+    selected = t; renderTrainList(); return;
+  }
+  if (act === 'ucpl') {
+    if (!state.running) return;
+    if (!t.canUncouple()) { toast(`${t.number} must be standing still (press ⏹ Stop) before uncoupling`); beep(180); return; }
+    const r = t.uncouple(); beep(420); setTimeout(() => beep(300), 120);
+    log(`✂ ${t.number} uncoupled — ${r.cars.length} vehicles left standing on ${(ln => ln ? lineName(ln) : 'the line')(Z_LINE[Math.round(r.zOf(r.front))])}. The engine is free to move.`, 'good');
+    selected = t; renderTrainList(); return;
   }
   selected = t;
   setView(act === 'cab' && !t.stabled ? 'driver' : 'follow');
@@ -2054,12 +2207,21 @@ function drawPanel() {
   }
   // trains
   for (const t of trains) {
-    const pts = t.bodyPoints(6);
-    g.strokeStyle = t.crashed ? (blink ? '#ffffff' : '#ff2a1a') : t.stabled ? '#b06a3a' : (t === selected ? '#ff8a7a' : '#ff2a1a'); g.lineWidth = 7;
-    g.beginPath(); pts.forEach(([x, z], i) => i ? g.lineTo(PX(x), PY(z)) : g.moveTo(PX(x), PY(z))); g.stroke();
+    const pts = t.bodyPoints(6), isSel = t === selected;
+    const path = () => { g.beginPath(); pts.forEach(([x, z], i) => i ? g.lineTo(PX(x), PY(z)) : g.moveTo(PX(x), PY(z))); };
+    if (isSel) {   // glowing halo round the selected train
+      const pulse = 0.5 + 0.5 * Math.sin(performance.now() / 220);
+      g.strokeStyle = `rgba(255,179,0,${0.25 + 0.35 * pulse})`; g.lineWidth = 18 + 6 * pulse; path(); g.stroke();
+      g.strokeStyle = '#ffffff'; g.lineWidth = 10; path(); g.stroke();
+    }
+    g.strokeStyle = t.crashed ? (blink ? '#ffffff' : '#ff2a1a') : isSel ? '#ffb300' : t.stabled ? '#b06a3a' : t.type === 'shunter' ? '#e0b020' : t.type === 'light' ? '#ff7a40' : '#ff2a1a'; g.lineWidth = 7;
+    path(); g.stroke();
     if (!t.stabled) { const X = PX(t.front), Y = PY(t.zOf(t.front)); g.fillStyle = '#fff'; g.beginPath(); g.moveTo(X + t.dir * 7, Y); g.lineTo(X, Y - 5); g.lineTo(X, Y + 5); g.closePath(); g.fill(); }
     g.fillStyle = '#ffe2dc'; g.textAlign = 'center'; g.font = 'bold 10px Segoe UI';
-    const [mx, mz] = pts[Math.floor(pts.length / 2)]; g.fillText(t.number + (t.expLine && t.actArr == null ? ' ▸' + lineShort(t.expLine) : ''), PX(mx), PY(mz) - 7);
+    const [mx, mz] = pts[Math.floor(pts.length / 2)];
+    const lbl = t.number + (t.expLine && t.actArr == null ? ' ▸' + lineShort(t.expLine) : '');
+    if (isSel) { const w = g.measureText(lbl).width + 10; g.fillStyle = '#ffb300'; g.fillRect(PX(mx) - w / 2, PY(mz) - 18, w, 14); g.fillStyle = '#111'; }
+    g.fillText(lbl, PX(mx), PY(mz) - 7);
   }
   // point markers (diamonds) — click to throw
   const showNo = pv.zoom * (PW - 40) / (2 * MAPHALF) * 20 > 28;
@@ -2216,13 +2378,53 @@ controls.autoRotate = true; controls.autoRotateSpeed = 0.35;
 let introFresh = true;
 $('loading').classList.add('hidden'); $('intro').classList.remove('hidden');
 
+// ---------- selected-train highlight in 3D: floating arrow + name tag + glowing outline along the train ----------
+const selMark = (() => {
+  const g = new THREE.Group();
+  const cone = new THREE.Mesh(new THREE.ConeGeometry(1.1, 2.6, 16), new THREE.MeshBasicMaterial({ color: 0xffb300, depthTest: false, transparent: true, fog: false }));
+  cone.rotation.x = Math.PI; cone.renderOrder = 999; g.add(cone);
+  const [c, x] = makeCanvas(512, 128), tex = toTex(c, { wrap: false });
+  const label = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true, fog: false }));
+  label.scale.set(12, 3, 1); label.position.y = 3.4; label.renderOrder = 999; g.add(label);
+  scene.add(g);
+  const N = 90, pos = new Float32Array(N * 6), geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  const idx = []; for (let i = 0; i < N - 1; i++) { const a = i * 2; idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); } geo.setIndex(idx);
+  const rib = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: 0xffc400, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false }));
+  rib.frustumCulled = false; scene.add(rib);
+  return { g, label, tex, c, x, rib, geo, pos, N, key: '' };
+})();
+function updateSelMark(now) {
+  const t = selected, S = selMark;
+  const show = !!t && trains.includes(t) && camMode !== 'driver';
+  S.g.visible = S.rib.visible = show; if (!show) return;
+  const key = t.number + '|' + t.name;
+  if (S.key !== key) {
+    S.key = key; const x = S.x; x.clearRect(0, 0, 512, 128);
+    x.fillStyle = 'rgba(20,20,20,0.85)'; x.fillRect(4, 8, 504, 112); x.strokeStyle = '#ffb300'; x.lineWidth = 8; x.strokeRect(4, 8, 504, 112);
+    x.textAlign = 'center'; x.fillStyle = '#ffb300'; x.font = 'bold 50px Arial'; x.fillText(t.number, 256, 60);
+    x.fillStyle = '#ffffff'; x.font = '28px Arial'; x.fillText(t.name.length > 34 ? t.name.slice(0, 33) + '…' : t.name, 256, 100);
+    S.tex.needsUpdate = true;
+  }
+  const lp = t.loco.position, s = Math.max(1, camera.position.distanceTo(lp) / 70);
+  S.g.scale.setScalar(s); S.g.position.set(lp.x, 6 + 2.2 * s + Math.sin(now * 3) * 0.5 * s, lp.z);
+  const n = S.N, hw = 2.5, d = t.dir;
+  for (let i = 0; i < n; i++) {
+    const xx = (t.p - t.length * i / (n - 1)) * d, z = t.zOf(xx), dz = t.zOf(xx + 0.6) - t.zOf(xx - 0.6), l = Math.hypot(1.2, dz);
+    const nx = -dz / l, nz = 1.2 / l;
+    S.pos.set([xx + nx * hw, 0.75, z + nz * hw, xx - nx * hw, 0.75, z - nz * hw], i * 6);
+  }
+  S.geo.attributes.position.needsUpdate = true;
+  S.rib.material.opacity = 0.35 + 0.3 * (0.5 + 0.5 * Math.sin(now * 4));
+}
+
 const clock = new THREE.Clock();
 let uiT = 0, panelT = 0, lastClockMin = -1;
 const _v = new THREE.Vector3(), _v2 = new THREE.Vector3(), shTarget = new THREE.Vector3();
 function frame() {
   requestAnimationFrame(frame);
   const dt = Math.min(0.1, clock.getDelta());
-  if (state.running && introFresh) { introFresh = false; for (const t of trains) t.dispose(); trains.length = 0; selected = null; state.nextSpawn = 3; for (const k in POINTS) POINTS[k] = 'N'; refreshAspects(); }
+  if (state.running && introFresh) { introFresh = false; for (const t of trains) t.dispose(); trains.length = 0; selected = null; state.nextSpawn = 3; for (const k in POINTS) POINTS[k] = 'N'; refreshAspects(); setupYards(); }
   const simDt = state.running ? dt * state.speed : (dt * 1);
   if (simDt > 0) {
     if (state.running) { const n = Math.ceil(simDt / 0.05); for (let i = 0; i < n; i++) simStep(simDt / n); }
@@ -2252,6 +2454,7 @@ function frame() {
   // effects
   const now = performance.now() / 1000;
   tailGlowMat.opacity = (Math.sin(now * 5) > 0 ? 1 : 0.12) * (0.45 + lampLevel * 0.55);
+  updateSelMark(now);
   for (const t of trains) if (t.headSprite) { t.headSprite.scale.setScalar(2.2 + lampLevel * 5); t.headSprite.visible = !(camMode === 'driver' && t === selected); }
   // UI
   uiT -= dt; panelT -= dt;
