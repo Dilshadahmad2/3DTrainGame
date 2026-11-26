@@ -217,11 +217,24 @@ const TRAFFIC = { light: 1.6, normal: 1, heavy: 0.6 }[SN.traffic] || 1;
 // =====================================================================
 //  RENDERER / SCENE
 // =====================================================================
-const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
-let HQ = localStorage.getItem('smq') !== 'low';
-renderer.setPixelRatio(Math.min(devicePixelRatio, HQ ? 1.5 : 1));
+// Graphics quality: remembered choice, otherwise picked automatically from the GPU.
+// Integrated graphics (Intel HD/UHD/Iris, phones) start in Low; the resolution then adapts to keep the frame rate up.
+const GPU_NAME = (() => {
+  try {
+    const gl = document.createElement('canvas').getContext('webgl');
+    const ext = gl && gl.getExtension('WEBGL_debug_renderer_info');
+    return ext ? String(gl.getParameter(ext.UNMASKED_RENDERER_WEBGL)) : '';
+  } catch (e) { return ''; }
+})();
+const WEAK_GPU = /intel|hd graphics|uhd|iris|mali|adreno|powervr|swiftshader|llvmpipe|apple gpu/i.test(GPU_NAME) || (navigator.hardwareConcurrency || 8) <= 4;
+const savedQ = localStorage.getItem('smq');
+let HQ = savedQ ? savedQ !== 'low' : !WEAK_GPU;
+const renderer = new THREE.WebGLRenderer({ antialias: HQ, powerPreference: 'high-performance' });
+const MAX_PR = Math.min(devicePixelRatio, HQ ? 1.5 : 1);
+let curPR = MAX_PR;
+renderer.setPixelRatio(curPR);
 renderer.setSize(innerWidth, innerHeight);
-renderer.shadowMap.enabled = HQ;
+renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 0.6;
@@ -324,23 +337,72 @@ const grassTex = (() => {
       g.fillStyle = gr; g.fillRect(x + ox - r, y + oy - r, 2 * r, 2 * r);
     });
   }
-  for (let i = 0; i < 16000; i++) {
-    g.fillStyle = `hsl(${68 + rand() * 40},${30 + rand() * 30}%,${18 + rand() * 22}%)`;
-    g.fillRect(rand() * S, rand() * S, 1 + rand() * 1.5, 2 + rand() * 4);
+  for (let i = 0; i < 26000; i++) {   // grass blades
+    const x = rand() * S, y = rand() * S, h = 3 + rand() * 7, lean = (rand() - 0.5) * 3;
+    g.strokeStyle = `hsl(${62 + rand() * 42},${32 + rand() * 30}%,${16 + rand() * 30}%)`; g.lineWidth = 0.8 + rand();
+    g.beginPath(); g.moveTo(x, y); g.lineTo(x + lean, y - h); g.stroke();
   }
   return toTex(c, { repeat: [420, 420] });
 })();
 
+// crushed-stone ballast: angular grey stones with dark gaps and sunlit tops
 const gravelTex = (() => {
-  const S = 256; const [c, g] = makeCanvas(S, S);
-  g.fillStyle = '#74706a'; g.fillRect(0, 0, S, S);
-  for (let i = 0; i < 2600; i++) {
-    const x = rand() * S, y = rand() * S, r = 1.5 + rand() * 4.5, l = 30 + rand() * 32, hue = 20 + rand() * 25;
-    g.fillStyle = `hsl(${hue},${rand() * 12}%,${l}%)`;
-    g.beginPath(); g.ellipse(x, y, r, r * (0.6 + rand() * 0.4), rand() * 3, 0, Math.PI * 2); g.fill();
-    g.fillStyle = 'rgba(0,0,0,0.25)'; g.beginPath(); g.ellipse(x + 1, y + 1.5, r * 0.8, r * 0.4, 0, 0, Math.PI * 2); g.fill();
+  const S = 512; const [c, g] = makeCanvas(S, S);
+  g.fillStyle = '#57524b'; g.fillRect(0, 0, S, S);
+  for (let i = 0; i < 7000; i++) {
+    const x = rand() * S, y = rand() * S, r = 2.5 + rand() * 5.5, l = 55 + rand() * 30, hue = 25 + rand() * 20;
+    wrapDraw(S, S, (ox, oy) => {
+      if (x + ox < -10 || x + ox > S + 10 || y + oy < -10 || y + oy > S + 10) return;
+      g.fillStyle = `hsl(${hue},${3 + rand() * 7}%,${l * 0.55}%)`;
+      g.beginPath(); const n = 5 + Math.floor(rand() * 3), a0 = rand() * 6;
+      for (let k = 0; k < n; k++) { const a = a0 + k / n * Math.PI * 2, rk = r * (0.7 + rand() * 0.45); g.lineTo(x + ox + Math.cos(a) * rk, y + oy + Math.sin(a) * rk * 0.85); }
+      g.closePath(); g.fill();
+      g.fillStyle = `hsl(${hue},${3 + rand() * 6}%,${l}%)`;
+      g.beginPath(); g.ellipse(x + ox - r * 0.15, y + oy - r * 0.2, r * 0.6, r * 0.45, rand() * 3, 0, 7); g.fill();
+    });
   }
   return toTex(c);
+})();
+// platform floor: big grey kota-stone slabs
+const tileTex = (() => {
+  const S = 512; const [c, g] = makeCanvas(S, S);
+  for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) {
+    const l = 58 + rand() * 9; g.fillStyle = `hsl(${32 + rand() * 12},${10 + rand() * 8}%,${l}%)`; g.fillRect(i * 128, j * 128, 128, 128);
+    for (let k = 0; k < 260; k++) { g.fillStyle = `rgba(${rand() < 0.5 ? '0,0,0' : '255,255,255'},${rand() * 0.07})`; g.fillRect(i * 128 + rand() * 128, j * 128 + rand() * 128, 2 + rand() * 6, 1 + rand() * 2); }
+  }
+  g.strokeStyle = 'rgba(70,64,56,0.55)'; g.lineWidth = 3;
+  for (let k = 0; k <= S; k += 128) { g.beginPath(); g.moveTo(k, 0); g.lineTo(k, S); g.stroke(); g.beginPath(); g.moveTo(0, k); g.lineTo(S, k); g.stroke(); }
+  return toTex(c);
+})();
+// yellow tactile warning strip (raised dots)
+const tactileTex = (() => {
+  const [c, g] = makeCanvas(128, 128);
+  g.fillStyle = '#e8b80e'; g.fillRect(0, 0, 128, 128);
+  for (let i = 0; i < 6; i++) for (let j = 0; j < 6; j++) {
+    const x = 11 + i * 21, y = 11 + j * 21;
+    g.fillStyle = 'rgba(0,0,0,0.25)'; g.beginPath(); g.arc(x + 1.5, y + 2, 6, 0, 7); g.fill();
+    g.fillStyle = '#f7d23a'; g.beginPath(); g.arc(x, y, 6, 0, 7); g.fill();
+  }
+  return toTex(c);
+})();
+// tall grass tuft (alpha-cut billboard)
+// (built as raw RGBA so the see-through pixels keep a grass colour — no dark fringes when the texture is filtered)
+const tuftTex = (() => {
+  const S = 128, [c, g] = makeCanvas(S, S);
+  for (let i = 0; i < 80; i++) {
+    const x = 18 + rand() * 92, h = 45 + rand() * 80, lean = (rand() - 0.5) * 44;
+    g.strokeStyle = `hsl(${60 + rand() * 38},${40 + rand() * 25}%,${38 + rand() * 30}%)`; g.lineWidth = 1.6 + rand() * 2.2;
+    g.beginPath(); g.moveTo(x, S); g.quadraticCurveTo(x + lean * 0.3, S - h * 0.6, x + lean, S - h); g.stroke();
+  }
+  const src = g.getImageData(0, 0, S, S).data, d = new Uint8Array(S * S * 4);
+  for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+    const i = (y * S + x) * 4, o = ((S - 1 - y) * S + x) * 4, a = src[i + 3];
+    if (a > 100) { d[o] = src[i]; d[o + 1] = src[i + 1]; d[o + 2] = src[i + 2]; d[o + 3] = 255; }
+    else { d[o] = 112; d[o + 1] = 128; d[o + 2] = 58; d[o + 3] = 0; }
+  }
+  const t = new THREE.DataTexture(d, S, S, THREE.RGBAFormat);
+  t.colorSpace = THREE.SRGBColorSpace; t.magFilter = THREE.LinearFilter; t.minFilter = THREE.LinearMipmapLinearFilter; t.generateMipmaps = true; t.needsUpdate = true;
+  return t;
 })();
 
 const concreteTex = (() => {
@@ -430,9 +492,12 @@ const MAT = {
   concreteDark: std(0x7d786f),
   wall: std(0xa39a8b),
   steel: std(0x7a8482, { metalness: 0.6, roughness: 0.45 }),
-  rail: std(0x9a9690, { metalness: 0.85, roughness: 0.32 }),
-  railSide: std(0x5c4636, { roughness: 0.9 }),
-  sleeper: std(0x8d8981),
+  rail: std(0xd2d2cf, { metalness: 0.9, roughness: 0.22 }),      // polished running head
+  railWeb: std(0x5e4434, { metalness: 0.3, roughness: 0.85 }),    // rusty web
+  railSide: std(0x4e3a2c, { roughness: 0.9 }),
+  sleeper: std(0x8e8a82, { roughness: 0.95 }),                    // PSC concrete sleeper
+  clip: std(0x2b2d30, { metalness: 0.5, roughness: 0.6 }),
+  relay: std(0x9aa3a6, { metalness: 0.4, roughness: 0.55 }),
   black: std(0x18191b, { roughness: 0.6 }),
   darkMetal: std(0x2a2c2f, { metalness: 0.45, roughness: 0.6 }),
   wheel: std(0x3a3a3a, { metalness: 0.7, roughness: 0.4 }),
@@ -483,7 +548,8 @@ const hemi = new THREE.HemisphereLight(0xbfd6ff, 0x5a5036, 0.7); scene.add(hemi)
 const sun = new THREE.DirectionalLight(0xfff1dc, 3.2);
 sun.castShadow = true;
 sun.shadow.mapSize.set(HQ ? 2048 : 1024, HQ ? 2048 : 1024);
-const SC = sun.shadow.camera; SC.left = -170; SC.right = 170; SC.top = 170; SC.bottom = -170; SC.near = 1; SC.far = 1200;
+const SHR = HQ ? 170 : 120;   // low quality: smaller shadow area = sharper shadows from a smaller map
+const SC = sun.shadow.camera; SC.left = -SHR; SC.right = SHR; SC.top = SHR; SC.bottom = -SHR; SC.near = 1; SC.far = 1200;
 sun.shadow.bias = -0.0003; sun.shadow.normalBias = 0.05;
 scene.add(sun); scene.add(sun.target);
 const sunDir = new THREE.Vector3();
@@ -614,42 +680,46 @@ function legZ(legs, p) {
   const ground = new THREE.Mesh(new THREE.PlaneGeometry(9000, 9000), new THREE.MeshStandardMaterial({ map: grassTex, roughness: 1 }));
   ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true; scene.add(ground);
   const gravel = (w, d, x, z, y) => {
-    const m = new THREE.Mesh(new THREE.PlaneGeometry(w, d), new THREE.MeshStandardMaterial({ map: texRepeat(gravelTex, w / 2.5, d / 2.5), color: 0x9a948a, roughness: 1, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 }));
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(w, d), new THREE.MeshStandardMaterial({ map: texRepeat(gravelTex, w / 4, d / 4), color: 0xb8b2a8, roughness: 1, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 }));
     m.rotation.x = -Math.PI / 2; m.position.set(x, y, z); m.receiveShadow = true; scene.add(m);
   };
   gravel(1700, 62, 0, 25, 0.012);
   gravel(1110, 36, 1100, -22, 0.014); gravel(1110, 36, -1100, -22, 0.014);
   gravel(TRACK_HALF * 2, 28, 0, 10, 0.008);
 
-  const sh = new THREE.Shape(); sh.moveTo(-2.45, 0); sh.lineTo(2.45, 0); sh.lineTo(1.75, 0.38); sh.lineTo(-1.75, 0.38); sh.closePath();
-  const ballastMat = new THREE.MeshStandardMaterial({ map: texRepeat(gravelTex, 0.6, 0.6), roughness: 1 });
-  const ballastPlain = new THREE.MeshStandardMaterial({ map: texRepeat(gravelTex, 1, 1), roughness: 1 });
+  const sh = new THREE.Shape(); sh.moveTo(-2.45, 0); sh.lineTo(2.45, 0); sh.lineTo(1.75, 0.4); sh.lineTo(-1.75, 0.4); sh.closePath();
+  const ballastMat = new THREE.MeshStandardMaterial({ map: texRepeat(gravelTex, 0.45, 0.45), roughness: 1 });
+  const ballastPlain = new THREE.MeshStandardMaterial({ map: texRepeat(gravelTex, 0.8, 0.8), roughness: 1 });
   const sleeperMs = [];
   const cb = new Builder();
-  const spacing = x => Math.abs(x) < 900 ? 0.68 : 1.36;
+  const NEAR = HQ ? 900 : 600;
+  const spacing = x => Math.abs(x) < NEAR ? 0.65 : HQ ? 1.3 : 1.7;
+  // rail = polished head + rusty web + foot
+  const railRun = (a, b, w = 1) => {
+    cb.beam(MAT.rail, a.clone().setY(RAIL_TOP - 0.022), b.clone().setY(RAIL_TOP - 0.022), 0.045, 0.072);
+    cb.beam(MAT.railWeb, a.clone().setY(RAIL_TOP - 0.1), b.clone().setY(RAIL_TOP - 0.1), 0.11, 0.04);
+    if (w) cb.beam(MAT.railSide, a.clone().setY(0.575), b.clone().setY(0.575), 0.035, 0.15);
+  };
 
   for (const s of SEGS) {
     const len = s.x1 - s.x0, cx = (s.x0 + s.x1) / 2;
     const bg = new THREE.ExtrudeGeometry(sh, { depth: len, bevelEnabled: false }); bg.translate(0, 0, -len / 2); bg.rotateY(Math.PI / 2);
-    const bm = new THREE.Mesh(bg, ballastMat); bm.position.set(cx, 0, s.z); bm.receiveShadow = true; scene.add(bm);
-    for (let x = s.x0 + 0.34; x < s.x1; x += spacing(x)) sleeperMs.push(new THREE.Matrix4().makeTranslation(x, 0.45, s.z));
-    for (const o of [-0.838, 0.838]) {
-      const r = new THREE.Mesh(new THREE.BoxGeometry(len, 0.15, 0.075), MAT.rail); r.position.set(cx, RAIL_TOP - 0.075, s.z + o); r.receiveShadow = true; scene.add(r);
-      const f = new THREE.Mesh(new THREE.BoxGeometry(len, 0.04, 0.15), MAT.railSide); f.position.set(cx, 0.57, s.z + o); scene.add(f);
-    }
+    cb.add(bg, ballastMat, M(cx, 0, s.z));
+    for (let x = s.x0 + 0.34; x < s.x1; x += spacing(x)) sleeperMs.push(new THREE.Matrix4().makeTranslation(x, 0.47, s.z));
+    for (const o of [-0.838, 0.838]) railRun(V(s.x0, 0, s.z + o), V(s.x1, 0, s.z + o));
   }
   // crossovers: smooth S-curves, rails/sleepers/ballast follow the same curve the trains use
   for (const c of XOVERS) {
     const P = x => V(x, 0, sCurve(x, c.x1, c.x2, c.z1, c.z2));
-    for (let x = c.x1; x <= c.x2; x += 0.68) {
+    for (let x = c.x1; x <= c.x2; x += 0.65) {
       const p = P(x), q = P(x + 0.3), ang = Math.atan2(q.z - p.z, q.x - p.x);
-      sleeperMs.push(new THREE.Matrix4().compose(V(p.x, 0.45, p.z), new THREE.Quaternion().setFromEuler(new THREE.Euler(0, -ang, 0)), V(1, 1, 1)));
+      sleeperMs.push(new THREE.Matrix4().compose(V(p.x, 0.47, p.z), new THREE.Quaternion().setFromEuler(new THREE.Euler(0, -ang, 0)), V(1, 1, 1)));
     }
     const step = 2.5;
     for (let x = c.x1 - 2; x < c.x2 + 2; x += step) {
       const a = P(x), b = P(x + step), t = b.clone().sub(a).normalize(), n = V(-t.z, 0, t.x);
-      for (const o of [-0.838, 0.838]) cb.beam(MAT.rail, a.clone().addScaledVector(n, o).setY(RAIL_TOP - 0.075), b.clone().addScaledVector(n, o).addScaledVector(t, 0.04).setY(RAIL_TOP - 0.075), 0.15, 0.075);
-      cb.beam(ballastPlain, a.clone().setY(0.19), b.clone().addScaledVector(t, 0.4).setY(0.19), 0.38, 3.6);
+      for (const o of [-0.838, 0.838]) railRun(a.clone().addScaledVector(n, o), b.clone().addScaledVector(n, o).addScaledVector(t, 0.04), 0);
+      cb.beam(ballastPlain, a.clone().setY(0.2), b.clone().addScaledVector(t, 0.4).setY(0.2), 0.4, 3.6);
     }
     // point machines beside both switches
     const away = Math.sign(c.z2 - c.z1);
@@ -666,10 +736,60 @@ function legZ(legs, p) {
     for (const z of [bz - 0.6, bz, bz + 0.6]) cb.box(MAT.white, x + 0.21, 1.35, z, 0.02, 0.5, 0.18);
     cb.box(MAT.tailRed, x, 1.85, bz, 0.25, 0.25, 0.25);
   }
-  const sleepers = new THREE.InstancedMesh(new THREE.BoxGeometry(0.26, 0.2, 2.75), MAT.sleeper, sleeperMs.length);
-  sleeperMs.forEach((m, i) => sleepers.setMatrixAt(i, m));
-  sleepers.receiveShadow = true; scene.add(sleepers);
+  // concrete sleepers (tapered PSC) + elastic rail clips, split into 400 m chunks so off-screen chunks are skipped
+  const slpGeo = (() => {   // PSC sleeper: wider at the rail seats, waisted in the middle
+    const g = new THREE.BoxGeometry(0.28, 0.2, 2.75, 1, 1, 6), p = g.attributes.position;
+    for (let i = 0; i < p.count; i++) { const z = Math.abs(p.getZ(i)); if (z < 0.5 && p.getY(i) > 0) p.setY(i, 0.06); if (z < 0.5) p.setX(i, p.getX(i) * 0.85); }
+    g.computeVertexNormals(); return g;
+  })();
+  const clipGeo = (() => {
+    const parts = [];
+    for (const z of [-0.838, 0.838]) for (const s of [-1, 1]) parts.push(new THREE.BoxGeometry(0.1, 0.07, 0.09).translate(0, 0.13, z + s * 0.1).toNonIndexed());
+    for (const z of [-0.838, 0.838]) parts.push(new THREE.BoxGeometry(0.22, 0.012, 0.2).translate(0, 0.105, z).toNonIndexed());   // rubber pad
+    return mergeGeometries(parts, false);
+  })();
+  const chunks = new Map(), _p = new THREE.Vector3();
+  for (const m of sleeperMs) { _p.setFromMatrixPosition(m); const k = Math.floor(_p.x / 400); if (!chunks.has(k)) chunks.set(k, []); chunks.get(k).push(m); }
+  for (const [k, list] of chunks) {
+    const sl = new THREE.InstancedMesh(slpGeo, MAT.sleeper, list.length);
+    list.forEach((m, i) => sl.setMatrixAt(i, m)); sl.receiveShadow = true; sl.computeBoundingSphere(); scene.add(sl);
+    if (Math.abs(k * 400 + 200) < NEAR + 200) {
+      const cl = new THREE.InstancedMesh(clipGeo, MAT.clip, list.length);
+      list.forEach((m, i) => cl.setMatrixAt(i, m)); cl.computeBoundingSphere(); scene.add(cl);
+    }
+  }
+  // grey relay / location boxes and cable-route markers beside the track, like on any Indian electrified section
+  for (let x = -1700; x <= 1700; x += 170) {
+    if (Math.abs(x) < 200) continue;
+    if (XOVERS.some(c => x > c.x1 - 30 && x < c.x2 + 30 && (c.z1 <= 0 || c.z2 <= 0))) continue;
+    cb.box(MAT.relay, x, 0.8, -3.9, 1.1, 1.6, 0.8); cb.box(MAT.relay, x, 1.65, -3.9, 1.25, 0.1, 0.95);
+    cb.box(MAT.concrete, x, 0.06, -3.9, 1.4, 0.12, 1.1);
+    cb.box(MAT.relay, x + 1.6, 0.6, -3.9, 0.7, 1.2, 0.6);
+  }
+  for (let x = -1500; x <= 1500; x += 50) if (Math.abs(x) > 180) cb.box(MAT.white, x, 0.35, -3.0, 0.12, 0.7, 0.12);
   scene.add(cb.build({ cast: false }));
+
+  // tall grass tufts in the cess between and beside the tracks
+  {
+    const n = HQ ? 7000 : 2600;
+    const tg = mergeGeometries([new THREE.PlaneGeometry(1.2, 0.9).translate(0, 0.45, 0), new THREE.PlaneGeometry(1.2, 0.9).translate(0, 0.45, 0).rotateY(Math.PI / 2)], false);
+    const tuft = new THREE.InstancedMesh(tg, new THREE.MeshLambertMaterial({ map: tuftTex, alphaTest: 0.45, side: THREE.DoubleSide }), n);
+    const onTrack = (x, z) => SEGS.some(s => x > s.x0 - 3 && x < s.x1 + 3 && Math.abs(z - s.z) < 3.3) || XOVERS.some(c => x > c.x1 - 3 && x < c.x2 + 3 && Math.abs(z - sCurve(x, c.x1, c.x2, c.z1, c.z2)) < 3.6);
+    const m = new THREE.Matrix4(), q = new THREE.Quaternion(), col = new THREE.Color();
+    let i = 0, guard = 0;
+    while (i < n && guard++ < n * 30) {
+      const x = rr(-1700, 1700), z = rr(-46, 62);
+      if (onTrack(x, z)) continue;
+      if (Math.abs(x) < 185 && z > -12 && z < 43) continue;      // platforms
+      if (Math.abs(x) < 300 && z < -8) continue;                  // station building, forecourt, cabin
+      if (z > -58 && z < -46) continue;                           // road
+      if (Math.abs(x) > 940 && Math.abs(x) < 1280 && z < -33) continue;   // goods sheds
+      const s = rr(0.6, 1.5);
+      m.compose(V(x, 0, z), q.setFromEuler(_e.set(0, rr(0, 3.14), 0)), V(s, s * rr(0.8, 1.4), s)); tuft.setMatrixAt(i, m);
+      tuft.setColorAt(i, col.setHSL(rr(0.15, 0.26), rr(0.2, 0.45), rr(0.78, 0.95))); i++;
+    }
+    tuft.count = i; tuft.receiveShadow = true; scene.add(tuft);
+  }
   // track letter boards on the corridor
   for (const side of [-1, 1]) for (const c of CORR) {
     const tex = signTex(128, 128, '#f7d117', [{ text: c.k, font: 'bold 96px Arial', y: 0.56 }]);
@@ -686,10 +806,22 @@ const stationB = new Builder();
 {
   const b = stationB;
   const wallMats = MAT.wall;
+  const copingMat = std(0xcfc8b8, { roughness: 0.8 });
+  const tactileMat = new THREE.MeshStandardMaterial({ map: texRepeat(tactileTex, PF_HALF * 2 / 0.6, 1), roughness: 0.7 });
+  const pfFaceTex = (() => {   // platform wall: cream plaster with a dark recess under the coping and the usual white/black stripes
+    const [c, g] = makeCanvas(256, 64);
+    g.fillStyle = '#b9ae98'; g.fillRect(0, 0, 256, 64);
+    for (let i = 0; i < 900; i++) { g.fillStyle = `rgba(0,0,0,${rand() * 0.08})`; g.fillRect(rand() * 256, rand() * 64, 3, 2); }
+    g.fillStyle = '#2b2925'; g.fillRect(0, 0, 256, 14);                       // shadow recess under coping
+    g.fillStyle = 'rgba(60,50,40,0.35)'; g.fillRect(0, 54, 256, 10);          // dirt at the foot
+    for (let x = 0; x < 256; x += 64) { g.fillStyle = 'rgba(0,0,0,0.25)'; g.fillRect(x, 14, 2, 50); }
+    return toTex(c);
+  })();
   function platform(z1, z2, edges) {
     const w = z2 - z1, cz = (z1 + z2) / 2;
-    const topMat = new THREE.MeshStandardMaterial({ map: texRepeat(concreteTex, PF_HALF * 2 / 3, w / 3), roughness: 0.92 });
-    const mesh = new THREE.Mesh(new THREE.BoxGeometry(PF_HALF * 2, PLAT_Y, w), [wallMats, wallMats, topMat, wallMats, wallMats, wallMats]);
+    const topMat = new THREE.MeshStandardMaterial({ map: texRepeat(tileTex, PF_HALF * 2 / 2.4, w / 2.4), roughness: 0.75 });
+    const faceMat = new THREE.MeshStandardMaterial({ map: texRepeat(pfFaceTex, PF_HALF * 2 / 6, 1), roughness: 0.9 });
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(PF_HALF * 2, PLAT_Y, w), [wallMats, wallMats, topMat, wallMats, faceMat, faceMat]);
     mesh.position.set(0, PLAT_Y / 2, cz); mesh.receiveShadow = true; mesh.castShadow = true; scene.add(mesh);
     // end ramps
     for (const s of [1, -1]) {
@@ -699,9 +831,10 @@ const stationB = new Builder();
     }
     for (const ez of edges) { // ez = edge z, sign toward track
       const zEdge = ez.z, s = ez.s;
-      b.box(MAT.concreteDark, 0, PLAT_Y + 0.01, zEdge - s * 0.25, PF_HALF * 2, 0.04, 0.5);
-      b.box(MAT.white, 0, PLAT_Y + 0.025, zEdge - s * 0.04, PF_HALF * 2, 0.02, 0.08);
-      b.box(MAT.yellow, 0, PLAT_Y + 0.025, zEdge - s * 0.9, PF_HALF * 2, 0.02, 0.55);
+      b.box(copingMat, 0, PLAT_Y - 0.06, zEdge - s * 0.15, PF_HALF * 2, 0.16, 0.5);          // coping slab, slight overhang
+      b.box(MAT.white, 0, PLAT_Y + 0.025, zEdge - s * 0.12, PF_HALF * 2, 0.02, 0.1);
+      b.box(tactileMat, 0, PLAT_Y + 0.025, zEdge - s * 0.85, PF_HALF * 2, 0.02, 0.6);
+      for (let x = -PF_HALF + 20; x < PF_HALF - 10; x += 20) b.box(MAT.yellow, x, PLAT_Y + 0.03, zEdge - s * 0.3, 0.12, 0.01, 0.3);   // coach position marks
     }
   }
   platform(-10, -1.75, [{ z: -1.75, s: 1 }]);
@@ -957,11 +1090,11 @@ function nearVillage(x, z) { return villageCenters.some(([vx, vz]) => Math.hypot
   const fb = new Builder();
   for (let x = -2700; x < 2700; x += 160) for (const side of [-1, 1]) for (let zz = 70; zz < 900; zz += 130) {
     if (rand() < 0.45) continue;
-    const z = side * zz + (side > 0 ? 10 : 0);
+    const w = rr(110, 150), d = rr(90, 120);
+    const z = side * (zz + d / 2) + (side > 0 ? 10 : -10);   // field edge never comes closer than ~70 m to the line (yards, road)
     if (nearVillage(x + 80, z)) continue;
     if (side < 0 && x > -330 && x < 330 && zz < 200) continue;
     if (side > 0 && x > -800 && x < 800 && zz < 140) continue;
-    const w = rr(110, 150), d = rr(90, 120);
     const geo = new THREE.PlaneGeometry(w, d); const uv = geo.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * w / 12, uv.getY(i) * d / 12);
     fb.add(geo, pick(fmats), M(x + 80, 0.02, z, -Math.PI / 2, 0, rand() < 0.5 ? 0 : Math.PI / 2));
   }
@@ -996,7 +1129,7 @@ function nearVillage(x, z) { return villageCenters.some(([vx, vz]) => Math.hypot
   scene.add(vb.build());
 
   // trees (instanced)
-  const N = 2600;
+  const N = HQ ? 2600 : 1500;
   const trunkGeo = new THREE.CylinderGeometry(0.18, 0.3, 1, 6); trunkGeo.translate(0, 0.5, 0);
   const trunks = new THREE.InstancedMesh(trunkGeo, MAT.trunk, N);
   const leaves = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 1), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.95, flatShading: true, envMapIntensity: 0.25 }), N);
@@ -1207,48 +1340,82 @@ function buildLocoProto(liv) {
   return g;
 }
 
+// ICF coach side, Indian Railways style: red (or blue) body, broad cream window band with pinstripes,
+// framed windows with bars, recessed doors with yellow handrails, yellow destination boards, zone + coach number
+const COACH_LIVERY = {
+  GEN: { base: '#a01d1b', band: '#efe2b2', pin: '#a01d1b', code: 'GS', roof: 0xd6d0bd },
+  SL: { base: '#1c4c92', band: '#ebe5cf', pin: '#1c4c92', code: 'S', roof: 0x9aa1a6 },
+  AC: { base: '#a01d1b', band: '#efe2b2', pin: '#a01d1b', code: 'B', roof: 0xd6d0bd },
+  SLR: { base: '#a01d1b', band: '#efe2b2', pin: '#a01d1b', code: 'SLR', roof: 0xd6d0bd },
+};
 function coachTextures(kind) {
-  const W = 1024, H = 128; const [c, g] = makeCanvas(W, H); const [ce, e] = makeCanvas(W, H);
-  const cfg = { SL: { base: '#1f4f9c', band: '#e9e1c6', code: 'SL' }, AC: { base: '#1d5fa8', band: '#f2f2f2', code: '3A' }, GEN: { base: '#7c2a22', band: '#e0c060', code: 'GS' }, SLR: { base: '#7c2a22', band: '#e0c060', code: 'SLR' } }[kind];
+  const W = HQ ? 2048 : 1024, H = W / 8, cfg = COACH_LIVERY[kind];
+  const [c, g] = makeCanvas(W, H); const [ce, e] = makeCanvas(W, H);
+  const X = f => f * W, Y = f => f * H;
   g.fillStyle = cfg.base; g.fillRect(0, 0, W, H);
-  const gr = g.createLinearGradient(0, 0, 0, H); gr.addColorStop(0, 'rgba(255,255,255,0.12)'); gr.addColorStop(0.55, 'rgba(0,0,0,0)'); gr.addColorStop(1, 'rgba(0,0,0,0.28)'); g.fillStyle = gr; g.fillRect(0, 0, W, H);
   e.fillStyle = '#000'; e.fillRect(0, 0, W, H);
-  g.fillStyle = cfg.band; g.fillRect(0, H * 0.17, W, H * 0.035); g.fillRect(0, H * 0.7, W, H * 0.035);
-  if (kind === 'AC') { g.fillStyle = 'rgba(255,255,255,0.18)'; g.fillRect(0, H * 0.22, W, H * 0.46); }
-  const door = x => {
-    g.strokeStyle = 'rgba(0,0,0,0.5)'; g.lineWidth = 2; g.strokeRect(x, H * 0.12, W * 0.04, H * 0.84);
-    g.fillStyle = '#1b2329'; g.fillRect(x + W * 0.01, H * 0.24, W * 0.02, H * 0.2);
-    e.fillStyle = '#ffd890'; e.fillRect(x + W * 0.01, H * 0.24, W * 0.02, H * 0.2);
-    g.fillStyle = '#e8c84a'; g.fillRect(x - 4, H * 0.3, 2, H * 0.5); g.fillRect(x + W * 0.04 + 2, H * 0.3, 2, H * 0.5);
+  // window band + pinstripes
+  g.fillStyle = cfg.band; g.fillRect(0, Y(0.27), W, Y(0.40));
+  g.fillStyle = cfg.pin; g.fillRect(0, Y(0.295), W, Y(0.012)); g.fillRect(0, Y(0.645), W, Y(0.012));
+  g.fillStyle = cfg.band; g.fillRect(0, Y(0.735), W, Y(0.022));
+  // weathering: light on top, grime at the bottom
+  let gr = g.createLinearGradient(0, 0, 0, H); gr.addColorStop(0, 'rgba(255,255,255,0.10)'); gr.addColorStop(0.5, 'rgba(0,0,0,0)'); gr.addColorStop(0.86, 'rgba(0,0,0,0.12)'); gr.addColorStop(1, 'rgba(20,12,6,0.55)');
+  g.fillStyle = gr; g.fillRect(0, 0, W, H);
+  // panel seams
+  g.strokeStyle = 'rgba(0,0,0,0.18)'; g.lineWidth = Math.max(1, W / 1400);
+  for (let i = 1; i < 12; i++) { g.beginPath(); g.moveTo(X(0.07 + i * 0.072), Y(0.05)); g.lineTo(X(0.07 + i * 0.072), Y(0.9)); g.stroke(); }
+  // doors
+  const door = x0 => {
+    const w = X(0.046);
+    g.fillStyle = 'rgba(0,0,0,0.22)'; g.fillRect(x0, Y(0.06), w, Y(0.86));
+    g.strokeStyle = 'rgba(0,0,0,0.6)'; g.lineWidth = W / 700; g.strokeRect(x0, Y(0.06), w, Y(0.86));
+    g.fillStyle = '#b9b4a6'; g.fillRect(x0 + w * 0.2, Y(0.16), w * 0.6, Y(0.24));
+    g.fillStyle = '#2d3e4b'; g.fillRect(x0 + w * 0.26, Y(0.19), w * 0.48, Y(0.18));
+    e.fillStyle = '#ffd890'; e.fillRect(x0 + w * 0.26, Y(0.19), w * 0.48, Y(0.18));
+    g.fillStyle = '#f1c40f'; g.fillRect(x0 - W / 400, Y(0.3), W / 500, Y(0.55)); g.fillRect(x0 + w + W / 900, Y(0.3), W / 500, Y(0.55));
+    g.fillStyle = '#ddd'; g.fillRect(x0 + w * 0.78, Y(0.5), W / 700, Y(0.08));
   };
-  door(W * 0.012); door(W * 0.948);
+  door(X(0.012)); door(X(0.942));
+  // windows
+  const glass = (x, y, w, h, bars) => {
+    g.fillStyle = '#d8d3c4'; g.fillRect(x - W / 500, y - W / 500, w + W / 250, h + W / 250);   // aluminium frame
+    const wg = g.createLinearGradient(0, y, 0, y + h); wg.addColorStop(0, '#7f9fb4'); wg.addColorStop(0.45, '#3a5568'); wg.addColorStop(1, '#1b2a35');
+    g.fillStyle = wg; g.fillRect(x, y, w, h);
+    g.fillStyle = 'rgba(255,255,255,0.18)'; g.beginPath(); g.moveTo(x + w * 0.1, y); g.lineTo(x + w * 0.45, y); g.lineTo(x + w * 0.15, y + h); g.lineTo(x - w * 0.2 + w * 0.1, y + h); g.closePath(); g.fill();
+    e.fillStyle = '#ffd690'; e.fillRect(x, y, w, h);
+    if (bars) { g.fillStyle = 'rgba(40,44,48,0.85)'; e.fillStyle = 'rgba(0,0,0,0.7)'; for (let k = 1; k < 4; k++) { const by = y + h * k / 4; g.fillRect(x, by, w, Math.max(1, H / 110)); e.fillRect(x, by, w, Math.max(1, H / 110)); } }
+    if (bars && rand() < 0.25) { const sh = h * rr(0.2, 0.7); g.fillStyle = '#8b8f8c'; g.fillRect(x, y, w, sh); e.fillStyle = '#000'; e.fillRect(x, y, w, sh); }
+  };
   if (kind === 'AC') {
-    const n = 9, span = W * 0.84 / n;
-    for (let i = 0; i < n; i++) {
-      const x = W * 0.08 + i * span + span * 0.12, w = span * 0.76;
-      const wg = g.createLinearGradient(x, 0, x + w, H); wg.addColorStop(0, '#3a5566'); wg.addColorStop(1, '#101a22');
-      g.fillStyle = '#0e0e0e'; g.fillRect(x - 2, H * 0.27 - 2, w + 4, H * 0.33 + 4); g.fillStyle = wg; g.fillRect(x, H * 0.27, w, H * 0.33);
-      e.fillStyle = '#fff1d6'; e.fillRect(x, H * 0.27, w, H * 0.33);
-    }
+    const n = 9, span = 0.86 / n;
+    for (let i = 0; i < n; i++) glass(X(0.075 + i * span + span * 0.1), Y(0.33), X(span * 0.8), Y(0.29), false);
   } else {
-    const n = kind === 'SLR' ? 6 : 13, span = W * 0.84 / n;
+    const n = kind === 'SLR' ? 7 : 12, span = 0.86 / n;
     for (let i = 0; i < n; i++) {
-      if (kind === 'SLR' && (i === 2 || i === 3)) continue;
-      const x = W * 0.08 + i * span + span * 0.18, w = span * 0.64;
-      g.fillStyle = '#121212'; g.fillRect(x - 2, H * 0.27 - 2, w + 4, H * 0.33 + 4);
-      g.fillStyle = '#1c252b'; g.fillRect(x, H * 0.27, w, H * 0.33);
-      e.fillStyle = '#ffd27a'; e.fillRect(x, H * 0.27, w, H * 0.33);
-      const shut = rand() < 0.3 ? rand() * 0.6 : 0;
-      if (shut) { g.fillStyle = 'rgba(120,130,135,0.9)'; g.fillRect(x, H * 0.27, w, H * 0.33 * shut); e.fillStyle = '#000'; e.fillRect(x, H * 0.27, w, H * 0.33 * shut); }
-      g.fillStyle = 'rgba(200,205,210,0.7)'; e.fillStyle = 'rgba(0,0,0,0.6)';
-      for (let bx = x + 4; bx < x + w; bx += 6) { g.fillRect(bx, H * 0.27, 1.5, H * 0.33); e.fillRect(bx, H * 0.27, 1.5, H * 0.33); }
+      if (kind === 'SLR' && (i === 3)) continue;
+      glass(X(0.075 + i * span + span * 0.2), Y(0.34), X(span * 0.6), Y(0.27), true);
     }
-    if (kind === 'SLR') { g.strokeStyle = 'rgba(0,0,0,0.6)'; g.lineWidth = 3; g.strokeRect(W * 0.42, H * 0.15, W * 0.16, H * 0.78); g.fillStyle = '#fff'; g.font = 'bold 16px Arial'; g.textAlign = 'center'; g.fillText('GUARD', W * 0.5, H * 0.52); }
+    if (kind === 'SLR') {   // luggage / guard compartment doors
+      g.strokeStyle = 'rgba(0,0,0,0.55)'; g.lineWidth = W / 600; g.strokeRect(X(0.43), Y(0.08), X(0.1), Y(0.82));
+      g.fillStyle = '#f5f0dc'; g.font = `bold ${Y(0.1)}px Arial`; g.textAlign = 'center'; g.fillText('GUARD', X(0.48), Y(0.82));
+    }
   }
-  g.fillStyle = '#fff'; g.font = 'bold 15px Arial'; g.textAlign = 'center';
-  g.fillText(cfg.code, W * 0.1, H * 0.86); g.fillText(cfg.code, W * 0.9, H * 0.86);
-  g.font = '13px Arial'; g.fillText(SN.code + ' ' + (10000 + Math.floor(rand() * 89999)), W * 0.5, H * 0.86);
-  return { map: toTex(c, { wrap: false }), emis: toTex(ce, { wrap: false }), base: cfg.base };
+  // yellow destination boards
+  for (const f of [0.28, 0.46, 0.64]) {
+    g.fillStyle = '#f2c230'; g.fillRect(X(f), Y(0.1), X(0.075), Y(0.11)); g.strokeStyle = 'rgba(0,0,0,0.5)'; g.lineWidth = W / 1200; g.strokeRect(X(f), Y(0.1), X(0.075), Y(0.11));
+    g.fillStyle = 'rgba(120,20,10,0.8)'; for (let k = 0; k < 2; k++) g.fillRect(X(f + 0.008), Y(0.125 + k * 0.045), X(0.058), Y(0.018));
+  }
+  // zone and coach number, coach class code
+  g.textAlign = 'center'; g.fillStyle = '#f3d98a';
+  const num = String(Math.floor(rand() * 90000) + 10000).slice(0, 5);
+  g.font = `bold ${Y(0.085)}px ${HINDI}`; g.fillText('उ रे', X(0.79), Y(0.15));
+  g.font = `bold ${Y(0.085)}px Arial`; g.fillText('N.R.', X(0.79), Y(0.245));
+  g.font = `bold ${Y(0.17)}px Arial`; g.fillText(num, X(0.855), Y(0.22));
+  g.fillStyle = '#ffffff'; g.font = `bold ${Y(0.1)}px Arial`;
+  const code = cfg.code === 'S' ? 'S' + (1 + Math.floor(rand() * 9)) : cfg.code === 'B' ? 'B' + (1 + Math.floor(rand() * 4)) : cfg.code;
+  g.fillText(code, X(0.1), Y(0.84)); g.fillText(code, X(0.9), Y(0.84));
+  g.font = `${Y(0.07)}px Arial`; g.fillText(SN.code + ' · ICF', X(0.5), Y(0.86));
+  return { map: toTex(c, { wrap: false }), emis: toTex(ce, { wrap: false }), base: cfg.base, roof: cfg.roof };
 }
 
 function buildCoachProto(kind) {
@@ -1259,11 +1426,16 @@ function buildCoachProto(kind) {
   const endM = std(t.base, { roughness: 0.6 });
   const body = new THREE.Mesh(new THREE.BoxGeometry(21.6, 2.7, 3.2), [endM, endM, endM, MAT.darkMetal, sideM, sideM]);
   body.position.set(-11.5, 2.6, 0); body.castShadow = body.receiveShadow = true; g.add(body);
-  const roofM = std(0x8a9096, { metalness: 0.35, roughness: 0.55 });
+  const roofM = std(t.roof, { metalness: 0.25, roughness: 0.6 });
   const roof = new THREE.CylinderGeometry(1.6, 1.6, 21.6, 20, 1, false, 0, Math.PI); roof.rotateZ(Math.PI / 2); roof.scale(1, 0.24, 1);
   b.add(roof, roofM, M(-11.5, 3.95, 0));
+  for (const z of [-1.6, 1.6]) b.box(roofM, -11.5, 3.98, z, 21.6, 0.06, 0.08);   // rain gutters
   if (kind === 'AC') { b.box(std(0xd0d4d8), -4.2, 4.32, 0, 2.6, 0.35, 2.2); b.box(std(0xd0d4d8), -18.8, 4.32, 0, 2.6, 0.35, 2.2); }
   else for (let x = -2.5; x > -21; x -= 1.8) b.cyl(roofM, x, 4.33, 0, 0.17, 0.2);
+  // yellow door handrails (3D) both sides
+  for (const z of [-1.63, 1.63]) for (const x of [-22.1, -20.95, -2.05, -0.9]) b.box(MAT.yellow, x, 2.3, z, 0.05, 1.3, 0.05);
+  // under-slung water tanks
+  for (const x of [-7.5, -15.5]) b.cylX(std(0x55595c, { metalness: 0.4 }), x, 0.95, 0.6, 0.38, 3.2);
   for (const x of [-0.55, -22.45]) b.box(MAT.black, x, 2.55, 0, 0.3, 2.3, 1.15);
   b.box(MAT.darkMetal, -11.5, 1.1, 0, 21, 0.32, 2.7);
   for (const [x, z] of [[-8, 1.0], [-13, -1.0], [-15.5, 1.0]]) b.box(std(0x3e4246), x, 0.82, z, 1.6, 0.55, 0.7);
@@ -1321,11 +1493,53 @@ function buildShunterProto() {
   buffers(b, -0.4, 1); buffers(b, -13.9, -1);
   g.add(b.build());
   const spr = new THREE.Sprite(headGlowMat); spr.name = 'headGlow'; spr.position.set(-0.1, 4.2, 0); spr.scale.setScalar(2); g.add(spr);
-  g.userData = { len: 14.3, rear: -13.9, loco: true };
+  g.userData = { len: 14.3, rear: -13.9, loco: true, stack: [-9, 4.2, 0] };
+  return g;
+}
+// WDM-3A / WDP style diesel: short hood, cab, long hood with louvres, orange + cream livery, exhaust stack
+function buildDieselProto() {
+  const g = new THREE.Group(), b = new Builder();
+  const org = std(0xdc5f1c, { roughness: 0.45, metalness: 0.2 }), crm = std(0xf0e2b6, { roughness: 0.5 }), red = std(0x8a1e18, { roughness: 0.5 });
+  const grille = std(0x3a3c3e, { metalness: 0.4, roughness: 0.6 });
+  b.box(MAT.darkMetal, -9.6, 1.2, 0, 18.8, 0.5, 3.0);                       // underframe / walkway
+  b.box(org, -9.6, 1.5, 0, 18.8, 0.12, 3.0);
+  b.box(org, -2.2, 2.55, 0, 3.0, 2.0, 2.4);                                 // short hood
+  b.box(org, -5.2, 2.95, 0, 3.0, 2.8, 3.0);                                 // cab
+  b.box(crm, -5.2, 4.42, 0, 3.1, 0.16, 3.1);                                // cab roof
+  b.box(org, -12.6, 2.75, 0, 12.0, 2.4, 2.5);                               // long hood
+  b.box(std(0x8d8f8a, { metalness: 0.4 }), -12.6, 4.0, 0, 12.0, 0.12, 2.3);  // hood roof
+  for (const z of [-1.26, 1.26]) {
+    b.box(crm, -12.6, 2.3, z, 12.0, 0.32, 0.02); b.box(red, -12.6, 2.1, z * 1.001, 12.0, 0.07, 0.02);   // cream band + red line
+    b.box(crm, -2.2, 2.2, z * 0.96, 3.0, 0.3, 0.02);
+    for (let x = -7.6; x > -18; x -= 1.15) b.box(grille, x, 3.25, z * 1.002, 0.8, 0.9, 0.02);           // louvres
+    b.box(MAT.glass, -5.2, 3.6, z * 1.2, 2.2, 0.9, 0.03);                                                // cab side windows
+    b.box(MAT.yellow, -9.6, 2.0, z * 1.18, 18.6, 0.04, 0.04);                                            // walkway handrail
+    for (let x = -1; x > -19; x -= 2.3) b.box(MAT.yellow, x, 1.78, z * 1.18, 0.04, 0.5, 0.04);
+  }
+  for (const x of [-3.71, -6.69]) b.box(MAT.glass, x, 3.65, 0, 0.03, 0.8, 2.4);     // cab front / rear windows
+  // exhaust stack, radiator fans
+  b.cyl(MAT.black, -8.6, 4.2, 0, 0.22, 0.45);
+  for (const x of [-15.5, -17.2]) { b.cyl(grille, x, 4.08, 0, 0.75, 0.06); b.cyl(MAT.black, x, 4.1, 0, 0.6, 0.05); }
+  // fuel tank, bogies, buffers, lights
+  b.box(std(0x2e3134, { metalness: 0.4 }), -9.6, 0.85, 0, 5.4, 0.75, 2.3);
+  bogie(b, -3.6, 3, 1.75, 0.55); bogie(b, -15.6, 3, 1.75, 0.55);
+  buffers(b, -0.5, 1); buffers(b, -19.2, -1);
+  for (const [hx, y, s] of [[-0.69, 3.4, 1], [-18.6, 3.75, -1]]) {
+    b.box(MAT.darkMetal, hx, y, 0, 0.12, 0.32, 0.7);
+    for (const z of [-0.17, 0.17]) b.add(new THREE.CircleGeometry(0.12, 16), MAT.headlight, M(hx + s * 0.07, y, z, 0, s * Math.PI / 2, 0));
+    for (const z of [-1.0, 1.0]) b.box(MAT.markerW, hx + s * 0.05, 1.95, z, 0.04, 0.14, 0.2);
+  }
+  // cowcatcher-style pilot plates in red/cream stripes
+  for (const [x, s] of [[-0.62, 1], [-19.08, -1]]) for (let i = 0; i < 5; i++) b.box(i % 2 ? red : crm, x, 0.75, -1.2 + i * 0.6, 0.08, 0.45, 0.6);
+  g.add(b.build());
+  const spr = new THREE.Sprite(headGlowMat); spr.name = 'headGlow'; spr.position.set(-0.5, 3.4, 0); spr.scale.setScalar(2.5); g.add(spr);
+  const pool = new THREE.Mesh(poolGeo, poolMat); pool.position.set(22.5, 0.03, 0); pool.rotation.x = -Math.PI / 2; g.add(pool);
+  g.userData = { len: 19.7, rear: -19.2, loco: true, stack: [-8.6, 4.5, 0] };
   return g;
 }
 const PROTO = {
   shunter: buildShunterProto(),
+  locoDiesel: buildDieselProto(),
   locoRed: buildLocoProto({ base: '#b8261c', stripe: '#f1e4c0', num: '30217' }),
   locoBlue: buildLocoProto({ base: '#2f5c8f', stripe: '#f2f2f2', num: '31044' }),
   SL: buildCoachProto('SL'), AC: buildCoachProto('AC'), GEN: buildCoachProto('GEN'), SLR: buildCoachProto('SLR'),
@@ -1512,7 +1726,9 @@ class Train {
     const nm = makeTrainName(type, this.job); this.number = nm.number; this.name = nm.name;
     this.expLine = this.stabled ? null : (opts.expLine ?? defaultExpLine(this));
     this.schedArr = null; this.schedDep = null; this.actArr = null;
-    this.cars = []; let off = 0; const list = opts.cars ? [] : CONSIST[type];
+    this.cars = []; let off = 0;
+    const diesel = Math.random() < (type === 'goods' ? 0.35 : 0.5);   // about half the trains are diesel-hauled
+    const list = opts.cars ? [] : CONSIST[type].map(k => (k === 'locoRed' || k === 'locoBlue') && diesel ? 'locoDiesel' : k);
     if (opts.cars) for (const c of opts.cars) { this.cars.push({ obj: c.obj, off, len: c.len }); off += c.len; }
     list.forEach((k, i) => {
       const obj = PROTO[k].clone(); scene.add(obj);
@@ -2378,6 +2594,58 @@ controls.autoRotate = true; controls.autoRotateSpeed = 0.35;
 let introFresh = true;
 $('loading').classList.add('hidden'); $('intro').classList.remove('hidden');
 
+// ---------- diesel exhaust: one particle system (single draw call) shared by every diesel loco ----------
+const smoke = (() => {
+  const N = HQ ? 600 : 260;
+  const [c, g] = makeCanvas(64, 64);
+  const gr = g.createRadialGradient(32, 32, 0, 32, 32, 32); gr.addColorStop(0, 'rgba(255,255,255,0.9)'); gr.addColorStop(0.5, 'rgba(255,255,255,0.45)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = gr; g.fillRect(0, 0, 64, 64);
+  for (let i = 0; i < 40; i++) { g.fillStyle = `rgba(0,0,0,${rand() * 0.12})`; g.beginPath(); g.arc(16 + rand() * 32, 16 + rand() * 32, 3 + rand() * 8, 0, 7); g.fill(); }
+  const geo = new THREE.BufferGeometry(), pos = new Float32Array(N * 3), col = new Float32Array(N * 4), size = new Float32Array(N);
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3)); geo.setAttribute('color', new THREE.BufferAttribute(col, 4)); geo.setAttribute('aSize', new THREE.BufferAttribute(size, 1));
+  const mat = new THREE.PointsMaterial({ map: toTex(c, { wrap: false }), size: 1, vertexColors: true, transparent: true, depthWrite: false, sizeAttenuation: true, fog: true });
+  mat.onBeforeCompile = sh => { sh.vertexShader = 'attribute float aSize;\n' + sh.vertexShader.replace('gl_PointSize = size;', 'gl_PointSize = size * aSize;'); };
+  const pts = new THREE.Points(geo, mat); pts.frustumCulled = false; pts.renderOrder = 5; scene.add(pts);
+  const P = Array.from({ length: N }, () => ({ life: 0, max: 1, x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, s0: 1, shade: 0.3, a: 0.5 }));
+  let next = 0;
+  const wp = new THREE.Vector3();
+  return {
+    emit(x, y, z, shade, a, s0) {
+      const p = P[next]; next = (next + 1) % N;
+      p.max = p.life = 2.2 + Math.random() * 1.8; p.x = x; p.y = y; p.z = z;
+      p.vx = (Math.random() - 0.5) * 0.6; p.vy = 2.6 + Math.random() * 1.4; p.vz = (Math.random() - 0.5) * 0.6;
+      p.shade = shade; p.a = a; p.s0 = s0;
+    },
+    // emit from every diesel / shunter stack near the camera
+    fromTrains(dt) {
+      for (const t of trains) {
+        const lo = t.locoObj, st = lo && lo.userData.stack; if (!st || t.crashed) continue;
+        if (lo.position.distanceToSquared(camera.position) > 900 * 900) continue;
+        const acc = t.v - (t._pv ?? t.v); t._pv = t.v;
+        const working = acc > 0.0005 && t.v < t.cfg.vmax * 0.9;
+        const rate = (working ? 16 : t.v > 0.3 ? 6 : 2.5) * (HQ ? 1 : 0.5);
+        t._sm = (t._sm || 0) + rate * dt;
+        if (t._sm < 1) continue;
+        lo.localToWorld(wp.set(st[0], st[1], st[2]));
+        while (t._sm >= 1) { t._sm -= 1; this.emit(wp.x, wp.y, wp.z, working ? 0.1 : 0.32, working ? 0.75 : 0.4, working ? 2.2 : 1.6); }
+      }
+    },
+    update(dt, light) {
+      for (let i = 0; i < N; i++) {
+        const p = P[i];
+        if (p.life <= 0) { col[i * 4 + 3] = 0; size[i] = 0; continue; }
+        p.life -= dt; const k = 1 - p.life / p.max;
+        p.vy *= 1 - 0.8 * dt; p.x += (p.vx + 0.9) * dt; p.y += p.vy * dt; p.z += (p.vz + 0.4) * dt;
+        pos[i * 3] = p.x; pos[i * 3 + 1] = p.y; pos[i * 3 + 2] = p.z;
+        const sh = (p.shade + k * 0.25) * light;
+        col[i * 4] = sh; col[i * 4 + 1] = sh; col[i * 4 + 2] = sh * 1.02; col[i * 4 + 3] = p.a * (1 - k) * Math.min(1, k * 10);
+        size[i] = p.s0 * (1 + k * 3.5) * 3.5;
+      }
+      geo.attributes.position.needsUpdate = geo.attributes.color.needsUpdate = geo.attributes.aSize.needsUpdate = true;
+    },
+  };
+})();
+
 // ---------- selected-train highlight in 3D: floating arrow + name tag + glowing outline along the train ----------
 const selMark = (() => {
   const g = new THREE.Group();
@@ -2418,6 +2686,8 @@ function updateSelMark(now) {
   S.rib.material.opacity = 0.35 + 0.3 * (0.5 + 0.5 * Math.sin(now * 4));
 }
 
+const perf = { frames: 0, t: 0, n: 0 };
+if (!HQ) renderer.shadowMap.autoUpdate = false;
 const clock = new THREE.Clock();
 let uiT = 0, panelT = 0, lastClockMin = -1;
 const _v = new THREE.Vector3(), _v2 = new THREE.Vector3(), shTarget = new THREE.Vector3();
@@ -2455,6 +2725,16 @@ function frame() {
   const now = performance.now() / 1000;
   tailGlowMat.opacity = (Math.sin(now * 5) > 0 ? 1 : 0.12) * (0.45 + lampLevel * 0.55);
   updateSelMark(now);
+  if (simDt > 0) { smoke.fromTrains(simDt); smoke.update(simDt, 1 - lampLevel * 0.75); }
+  // performance: measure FPS, adapt the render resolution, refresh shadows every other frame in Low
+  perf.frames++; perf.t += dt;
+  if (perf.t >= 1) {
+    const fps = perf.frames / perf.t; perf.frames = 0; perf.t = 0;
+    if (fps < 38 && curPR > 0.6) { curPR = Math.max(0.6, +(curPR - 0.1).toFixed(2)); renderer.setPixelRatio(curPR); }
+    else if (fps > 57 && curPR < MAX_PR) { curPR = Math.min(MAX_PR, +(curPR + 0.05).toFixed(2)); renderer.setPixelRatio(curPR); }
+    $('qBtn').textContent = `Graphics: ${HQ ? 'High' : 'Low'}${savedQ ? '' : ' (auto)'} · ${Math.round(fps)} fps`;
+  }
+  if (!HQ) renderer.shadowMap.needsUpdate = (perf.n = (perf.n + 1) % 2) === 0;
   for (const t of trains) if (t.headSprite) { t.headSprite.scale.setScalar(2.2 + lampLevel * 5); t.headSprite.visible = !(camMode === 'driver' && t === selected); }
   // UI
   uiT -= dt; panelT -= dt;
