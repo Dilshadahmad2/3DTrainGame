@@ -505,7 +505,8 @@ const pfLights = []; // kept empty: lamp glow sprites are used instead of real l
 //  Trains simply follow the points as they are set.
 // =====================================================================
 // Station (south -> north): Line 1 loop · Line 2 PF1 · Line 3 PF2 · Line 4 PF3 · Line 5 PF4 · Line 6 PF5 · Line 7 loop · Line 8 loop
-// Yard (separate, east, south of the station): single lead off Line 1 -> Yard 1, 2, 3 + Goods line
+// Yards (separate, south of the station, one at EACH end): lead off Line 1 -> Yard 1, 2, 3 + Goods line,
+// and each yard's far end joins corridor track A, so a train can enter a yard from either side, before or after the platforms
 const LINE_Z = { 1: 0, 2: 5, 3: 15, 4: 20, 5: 30, 6: 35, 7: 45, 8: 50, 9: -14, 10: -20, 11: -26, 12: -32 };
 const Z_LINE = Object.fromEntries(Object.entries(LINE_Z).map(([n, z]) => [z, +n]));
 const GOODS_LINE = 12, YARD_LINES = [9, 10, 11, 12];
@@ -519,8 +520,8 @@ const SEGS = [
   { z: 0, x0: -END_U, x1: END_U }, { z: 5, x0: -END_U, x1: END_U }, { z: 15, x0: -END_U, x1: END_U }, { z: 20, x0: -END_U, x1: END_U },
   { z: 10, x0: -END_U, x1: -490 }, { z: 10, x0: 490, x1: END_U },
   { z: 30, x0: -740, x1: 740 }, { z: 35, x0: -640, x1: 640 }, { z: 45, x0: -520, x1: 520 }, { z: 50, x0: -440, x1: 440 },
-  { z: -14, x0: 460, x1: 1540 }, { z: -20, x0: 780, x1: 1460 }, { z: -26, x0: 860, x1: 1380 }, { z: -32, x0: 940, x1: 1300 },
 ];
+for (const [z, a, b] of [[-14, 570, 1540], [-20, 780, 1460], [-26, 860, 1380], [-32, 940, 1300]]) SEGS.push({ z, x0: a, x1: b }, { z, x0: -b, x1: -a });
 const XOVERS = [], POINTS = {};
 {
   // [z inner, u inner, z outer, u outer]
@@ -540,13 +541,24 @@ const XOVERS = [], POINTS = {};
     }
   }
 }
-// yard: one lead track leaves Line 1 at the east end, runs out alone, then splits into Yard 1–3 and the Goods line;
-// at its far end the yard joins corridor track A again, so trains from the East can enter it too (point 308)
-{
-  let n = 300;
-  for (const [zi, ui, zo, uo] of [[0, 380, -14, 460], [-14, 720, -20, 780], [-20, 800, -26, 860], [-26, 880, -32, 940],
+// extra throat crossover (141 west / 241 east): Line 2 / track B -> Line 1 just before the yard point,
+// so trains from Lines 2 and 3 can also reach Line 1 and the yard after the platforms
+for (const side of [-1, 1]) {
+  const c = { id: side > 0 ? '241' : '141', x1: side > 0 ? 395 : -455, z1: side > 0 ? 5 : 0, x2: side > 0 ? 455 : -395, z2: side > 0 ? 0 : 5, side };
+  XOVERS.push(c); POINTS[c.id] = 'N';
+}
+// yards: a lead leaves Line 1 beyond each end of the station (point 301 east / 401 west), splits into Yard 1–3 and the Goods line;
+// at the far end each yard joins corridor track A again (point 308 east / 408 west) — so both yards are THROUGH yards:
+//   from the West: before the platforms -> 408 into the West yard · after the platforms -> 301 into the East yard
+//   from the East: before the platforms -> 308 into the East yard · after the platforms -> 401 into the West yard
+// and a train that has gone past a yard point can stop and use "Reverse" to shunt back into the yard.
+for (const side of [1, -1]) {
+  let n = side > 0 ? 300 : 400;
+  for (const [zi, ui, zo, uo] of [[0, 490, -14, 570], [-14, 720, -20, 780], [-20, 800, -26, 860], [-26, 880, -32, 940],
     [-32, 1300, -26, 1360], [-26, 1380, -20, 1440], [-20, 1460, -14, 1520], [-14, 1540, 0, 1640]]) {
-    n++; const c = { id: String(n), x1: ui, z1: zi, x2: uo, z2: zo, side: 1 }; XOVERS.push(c); POINTS[c.id] = 'N';
+    n++;
+    const pA = { x: side * ui, z: zi }, pB = { x: side * uo, z: zo }, [P1, P2] = pA.x < pB.x ? [pA, pB] : [pB, pA];
+    const c = { id: String(n), x1: P1.x, z1: P1.z, x2: P2.x, z2: P2.z, side }; XOVERS.push(c); POINTS[c.id] = 'N';
   }
 }
 const XO_BY_ID = Object.fromEntries(XOVERS.map(c => [c.id, c]));
@@ -603,7 +615,7 @@ function legZ(legs, p) {
     m.rotation.x = -Math.PI / 2; m.position.set(x, y, z); m.receiveShadow = true; scene.add(m);
   };
   gravel(1700, 62, 0, 25, 0.012);
-  gravel(940, 36, 870, -22, 0.014);
+  gravel(1110, 36, 1100, -22, 0.014); gravel(1110, 36, -1100, -22, 0.014);
   gravel(TRACK_HALF * 2, 28, 0, 10, 0.008);
 
   const sh = new THREE.Shape(); sh.moveTo(-2.45, 0); sh.lineTo(2.45, 0); sh.lineTo(1.75, 0.38); sh.lineTo(-1.75, 0.38); sh.closePath();
@@ -825,9 +837,9 @@ const stationB = new Builder();
   }
   stair(-6.2, PLAT_Y); stair(10, PLAT_Y); stair(25, PLAT_Y); stair(38.9, PLAT_Y);
 
-  // ----- Goods shed (माल गोदाम) in the separate yard, beside the goods line -----
-  {
-    const gx = 1110, gl = 300, gz0 = -33.75, gz1 = -40;
+  // ----- Goods shed (माल गोदाम) in each yard, beside the goods line -----
+  for (const gx of [1110, -1110]) {
+    const gl = 300, gz0 = -33.75, gz1 = -40;
     const top = new THREE.MeshStandardMaterial({ map: texRepeat(concreteTex, gl / 3, 2), roughness: 0.92 });
     const pm = new THREE.Mesh(new THREE.BoxGeometry(gl, PLAT_Y, gz0 - gz1), [MAT.wall, MAT.wall, top, MAT.wall, MAT.wall, MAT.wall]);
     pm.position.set(gx, PLAT_Y / 2, (gz0 + gz1) / 2); pm.receiveShadow = pm.castShadow = true; scene.add(pm);
@@ -846,7 +858,7 @@ const stationB = new Builder();
       for (let k = 0; k < stack; k++) b.box(rand() < 0.7 ? sack : crate, x + rr(-0.1, 0.1), PLAT_Y + 0.25 + k * 0.5, z, 0.95, 0.48, 0.62, rr(-0.3, 0.3));
     }
     wallSign(signTex(1024, 200, '#f7d117', [{ text: 'माल गोदाम', font: `bold 80px ${HINDI}`, y: 0.3 }, { text: `GOODS SHED · ${SN.boardEn}`, font: 'bold 60px Arial', y: 0.74 }]), gx, 7.4, -39.93, 12, 2.3);
-    wallSign(signTex(512, 160, '#f7d117', [{ text: 'यार्ड', font: `bold 60px ${HINDI}`, y: 0.32 }, { text: 'YARD', font: 'bold 60px Arial', y: 0.74 }]), 700, 3, -9.2, 2.4, 0.75);
+    wallSign(signTex(512, 160, '#f7d117', [{ text: 'यार्ड', font: `bold 60px ${HINDI}`, y: 0.32 }, { text: gx > 0 ? 'EAST YARD' : 'WEST YARD', font: 'bold 44px Arial', y: 0.74 }]), Math.sign(gx) * 700, 3, -9.2, 2.4, 0.75);
     // Indian trucks waiting at the warehouse
     const hornTex = signTex(256, 256, '#1e5fa8', [{ text: 'HORN', font: 'bold 54px Arial', color: '#ffeb3b', y: 0.3 }, { text: 'OK', font: 'bold 54px Arial', color: '#ff5252', y: 0.52 }, { text: 'PLEASE', font: 'bold 50px Arial', color: '#ffeb3b', y: 0.74 }, { text: 'शुभ यात्रा', font: `bold 30px ${HINDI}`, color: '#fff', y: 0.92 }], '#ff9800');
     const bodyBack = new THREE.MeshStandardMaterial({ map: hornTex }), cabCols = [0xf28c28, 0xd32f2f, 0x2e7d32, 0xfbc02d], bodyCols = [0x1e5fa8, 0x7b1fa2, 0x00897b, 0xc62828];
@@ -908,7 +920,8 @@ const stationB = new Builder();
     }
   }
   // yard portals
-  for (let x = 470; x <= 1530; x += 55) {
+  for (const side of [1, -1]) for (let u = 580; u <= 1530; u += 55) {
+    const x = side * u;
     for (const z of [-8.5, -37]) { b.box(MAT.pole, x, beamY / 2, z, 0.3, beamY + 0.5, 0.3); b.box(MAT.concreteDark, x, 0.25, z, 0.8, 0.5, 0.8); }
     b.box(MAT.pole, x, beamY, -22.75, 0.26, 0.36, 28.5);
     for (const z of [-14, -20, -26, -32]) if (segAt(z, x)) { b.box(MAT.pole, x, (wireY + beamY) / 2, z, 0.06, beamY - wireY, 0.06); b.box(MAT.pole, x, wireY + 0.05, z, 0.05, 0.05, 0.9); }
@@ -989,7 +1002,7 @@ function nearVillage(x, z) { return villageCenters.some(([vx, vz]) => Math.hypot
   while (i < N && guard++ < 50000) {
     const x = rr(-2900, 2900); const z = rand() < 0.5 ? rr(-1100, -27) : rr(75, 1100);
     if (z > -62 && z < -8 && x > -100 && x < 260) continue;
-    if (z > -62 && z < -4 && x > 330 && x < 1450) continue;   // yard and goods shed
+    if (z > -62 && z < -4 && Math.abs(x) > 330 && Math.abs(x) < 1660) continue;   // yards and goods sheds
     if (z > -60 && z < -46) continue; // road
     const nearTrack = Math.abs(z) < 120;
     if (!nearTrack && rand() < 0.35) continue;
@@ -1471,7 +1484,7 @@ class Train {
       }
       this.cars.push({ obj, off, len }); off += len;
     });
-    this.length = off;
+    this.length = off; this.locoObj = this.cars[0].obj;
     this.headSprite = this.cars[0].obj.getObjectByName('headGlow');
     this.startZ = z; this.resetTo(startU, z);
     this.v = this.stabled ? 0 : this.cfg.vmax * 0.85;
@@ -1481,9 +1494,27 @@ class Train {
     this.sync();
   }
   resetTo(startU, z) { this.p = -startU; this.legs = [{ p0: -Infinity, p1: Infinity, za: z, zb: z }]; }
-  get loco() { return this.cars[0].obj; }
+  get loco() { return this.locoObj || this.cars[0].obj; }
   canHaltOn(line) { return this.type !== 'goods' && !!LINE_PF[line]; }
-  get yardHaltP() { return this.dir > 0 ? 1250 : -990; }
+  // yard stop boards in progress coords: East yard x=1250 (eastbound) / 990 (westbound), West yard mirrored
+  // -> for either direction the two candidates are p = -990 and p = 1250
+  nextYardHalt(zAt, from) {
+    for (const hp of [-990, 1250]) if (hp > from - 3 && YARD_LINES.includes(Z_LINE[Math.round(zAt(Math.max(hp, this.p)))])) return hp;
+    return null;
+  }
+  // shunt: stop, change ends and run back the other way (loco now propels the rake)
+  canReverse() { return !this.stabled && !this.crashed && !this.terminated && this.v < 0.3 && !(this.yardT > 0) && !(this.holdT > 0) && !(this.halted && !this.dwellDone); }
+  reverse() {
+    const L = this.length;
+    this.legs = this.legs.slice().reverse().map(g => ({ p0: -g.p1, p1: -g.p0, za: g.zb, zb: g.za, curve: g.curve, c: g.c }));
+    const last = this.curLeg; if (!last.curve) last.p1 = Infinity;
+    this.p = L - this.p; this.dir = -this.dir; this.v = 0;
+    this.cars.reverse(); let off = 0; for (const c of this.cars) { c.off = off; off += c.len; }
+    this.passed = new Set(); this.ranThrough = new Set(); this.waitSig = null; this.blockedBy = null;
+    this.shunting = !this.shunting;
+    this.pred = predictFrom(this.curLeg.za, this.p, this.dir, 1600, this.curLeg.curve ? this.curLeg : null);
+    this.sync();
+  }
   get eta() { return this.actArr ?? state.time + Math.max(0, -this.p) / Math.max(this.v, 8) + (this.waitSig ? 60 : 0); }
   recordArrival(line) {
     if (this.actArr != null) return;
@@ -1534,7 +1565,11 @@ class Train {
     if (this.stabled || this.crashed) return;
     if (this.yardT > 0) {
       this.v = 0; this.yardT -= h; this.status = `${this.yardMsg} · ${Math.ceil(this.yardT)} s`; this.statusCls = 'info';
-      if (this.yardT <= 0) { this.holdT = 20; log(`${this.number}: yard work finished — ready to leave the yard towards the ${this.dir > 0 ? 'East (via point 308 to track A)' : 'West (via the lead and Line 1)'}.`, 'warn'); }
+      if (this.yardT <= 0) {
+        this.holdT = 20; this.shunting = false;
+        const east = this.front > 0, out = (this.dir > 0) === east ? `via point ${east ? 308 : 408} to track A` : `via the lead (point ${east ? 301 : 401}) to Line 1`;
+        log(`${this.number}: yard work finished — ready to leave the ${east ? 'East' : 'West'} yard towards the ${this.dir > 0 ? 'East' : 'West'} ${out}.`, 'warn');
+      }
       return;
     }
     if (this.holdT > 0) {
@@ -1557,6 +1592,8 @@ class Train {
       if (ds <= 0 || ds > 1600 || Math.abs(zAhead(sp) - s.track) > 0.8) continue;
       if (s.aspect === 0 && ds - 10 < stop) { stop = ds - 10; stopSig = s; }
     }
+    // Station Master's order to stop: brake normally to a stand
+    if (this.stopReq) { const sd = Math.max(0, this.v * this.v / (2 * BRAKE) * 0.85 - 1); if (sd < stop) { stop = sd; stopSig = null; } }
     const dead = pred.legs.find(L => L.dead);
     if (dead && dead.p1 - this.p - 15 < stop) { stop = dead.p1 - this.p - 15; stopSig = null; }
     // driver stops behind anything standing on the path ahead (rear or head-on)
@@ -1593,16 +1630,14 @@ class Train {
     }
     // yard halt for goods / stabling work
     if ((this.job === 'unload' || this.job === 'stable') && !this.yardDone) {
-      const hp = this.yardHaltP;
-      if (hp > this.p - 3) {
-        const ln = Z_LINE[Math.round(zAhead(Math.max(hp, this.p)))];
-        if (YARD_LINES.includes(ln) && hp - this.p < stop) { stop = Math.max(0, hp - this.p); stopSig = null; blocker = null; }
-      }
+      const hp = this.nextYardHalt(zAhead, this.p);
+      if (hp != null && hp - this.p < stop) { stop = Math.max(0, hp - this.p); stopSig = null; blocker = null; }
     }
     // speed: 45 km/h over crossovers (with braking curve), station zone limit
     let lim = this.cfg.vmax;
     if (cur.curve || this.legs.some(L => L.curve && L.p1 > this.p - this.length)) lim = XLIM;
     else { const nc = pred.legs.find(L => L.curve && L.p0 > this.p); if (nc) lim = Math.min(lim, Math.sqrt(XLIM * XLIM + 2 * BRAKE * (nc.p0 - this.p))); }
+    if (this.shunting) lim = Math.min(lim, 8.4);            // propelling / shunting: 30 km/h
     const zl = this.halts ? 16 : 22;
     if (this.p < -700) lim = Math.min(lim, Math.sqrt(zl * zl + 2 * BRAKE * (-700 - this.p)));
     else if (this.p < 700) lim = Math.min(lim, zl);
@@ -1629,7 +1664,7 @@ class Train {
     // yard work at the stop board inside the yard
     const lnNow = Z_LINE[Math.round(this.zOf(this.front))];
     if (!this.yardDone && YARD_LINES.includes(lnNow) && this.v < 0.15 && (this.job === 'unload' || this.job === 'stable')) {
-      if (Math.abs(this.yardHaltP - this.p) < 3) {
+      if ([-990, 1250].some(hp => Math.abs(hp - this.p) < 3)) {
         this.yardDone = true;
         const unload = this.job === 'unload' && lnNow === GOODS_LINE;
         const good = unload || (this.job === 'stable' && lnNow !== GOODS_LINE);
@@ -1671,6 +1706,8 @@ class Train {
     else if (this.p < -STARTER_U) { this.status = `Approaching · ${(Math.abs(this.p) / 1000).toFixed(2)} km out · ${Math.round(this.v * 3.6)} km/h`; this.statusCls = 'info'; }
     else if (this.p < STARTER_U) { this.status = `In station · ${lineNow ? lineName(lineNow) : '—'}`; this.statusCls = 'ok'; }
     else { this.status = `Departing · ${Math.round(this.v * 3.6)} km/h`; this.statusCls = 'ok'; }
+    if (this.stopReq && !(this.halted && !this.dwellDone)) { this.status = this.v < 0.2 ? 'Stopped on your order · ⇄ Reverse or ▶ Go' : `Braking on your order · ${Math.round(this.v * 3.6)} km/h`; this.statusCls = 'warn'; }
+    else if (this.shunting && this.v > 0.2) this.status = `Shunting (reversed) · ${lineNow ? lineName(lineNow) : '—'} · ${Math.round(this.v * 3.6)} km/h`;
     this.sync();
   }
   dispose() { for (const c of this.cars) scene.remove(c.obj); }
@@ -1855,7 +1892,7 @@ function cardFor(t) {
   el.innerHTML = `<div class="tnum"><span class="no"></span><span class="nm"></span></div>
     <div class="tinfo"></div><div class="tstat"></div><div class="tsched"></div><div class="tdest"></div>
     <label class="pfl" data-act="none">Expected platform / line <select class="pfsel" data-act="none"></select></label>
-    <div class="tctl"><button class="btn sm" data-act="view">🎥 View</button><button class="btn sm" data-act="cab">🚆 Cab</button><button class="btn sm sigb" data-act="sig"></button></div>
+    <div class="tctl"><button class="btn sm" data-act="view">🎥 View</button><button class="btn sm" data-act="cab">🚆 Cab</button><button class="btn sm sigb" data-act="sig"></button><button class="btn sm" data-act="stop" title="Order the driver to stop / go on">⏹ Stop</button><button class="btn sm" data-act="rev" title="Change ends and shunt back (set the points first) — e.g. back into a yard">⇄ Reverse</button></div>
     <div class="tpts"></div>`;
   const sel = el.querySelector('.pfsel');
   if (t.stabled) el.querySelector('.pfl').style.display = 'none';
@@ -1907,6 +1944,10 @@ function renderTrainList() {
     sb.style.display = ns ? '' : 'none';
     if (ns) { sb.dataset.sig = ns.id; sb.textContent = `🚦 ${ns.id} ${ns.cleared ? 'OFF' : 'ON'}`; sb.classList.toggle('off', ns.cleared); }
     el.querySelector('[data-act="cab"]').style.display = t.stabled ? 'none' : '';
+    const stb = el.querySelector('[data-act="stop"]'), rvb = el.querySelector('[data-act="rev"]');
+    stb.style.display = rvb.style.display = t.stabled || t.crashed ? 'none' : '';
+    stb.textContent = t.stopReq ? '▶ Go' : '⏹ Stop'; stb.classList.toggle('on', !!t.stopReq);
+    rvb.disabled = !t.canReverse(); rvb.style.opacity = rvb.disabled ? 0.45 : 1;
     // facing points ahead: set the route right from here
     const facing = t.stabled ? [] : t.pred.facing.filter(f => f.p - t.p < 1400).slice(0, 6);
     const sig = facing.map(f => f.c.id + POINTS[f.c.id]).join(',');
@@ -1925,6 +1966,17 @@ $('trains').addEventListener('click', e => {
   if (act === 'none') return;
   if (act === 'pt') { togglePoint(btn.dataset.pt); renderTrainList(); return; }
   if (act === 'sig') { const s = signals.find(s => s.id === btn.dataset.sig); if (s) clickSignal(s); renderTrainList(); return; }
+  if (act === 'stop') {
+    t.stopReq = !t.stopReq; beep(t.stopReq ? 520 : 880);
+    log(t.stopReq ? `${t.number}: driver told to STOP.` : `${t.number}: driver told to go on.`, 'warn'); renderTrainList(); return;
+  }
+  if (act === 'rev') {
+    if (!state.running) return;
+    if (!t.canReverse()) { toast(`${t.number} must be standing still (press ⏹ Stop) before it can reverse`); beep(180); return; }
+    t.reverse(); t.stopReq = false; horn(t, 0.6); beep(700);
+    log(`${t.number}: driver changed ends — now shunting towards the ${t.dir > 0 ? 'East' : 'West'} at 30 km/h. Check the points ahead!`, 'warn');
+    renderTrainList(); return;
+  }
   selected = t;
   setView(act === 'cab' && !t.stabled ? 'driver' : 'follow');
   renderTrainList();
@@ -1979,8 +2031,10 @@ function drawPanel() {
     g.fillRect(PX(-160), PY(z0), PX(160) - PX(-160), PY(z1) - PY(z0));
     g.fillStyle = '#e6f2ea'; g.textAlign = 'center'; g.font = '600 10px Segoe UI'; g.fillText(label, PX(0), (PY(z0) + PY(z1)) / 2 + 4); g.fillStyle = 'rgba(120,140,128,0.45)';
   }
-  g.fillRect(PX(960), PY(-33.75), PX(1260) - PX(960), PY(-38) - PY(-33.75));
-  g.fillStyle = '#e6f2ea'; g.textAlign = 'center'; g.fillText('GOODS SHED', (PX(960) + PX(1260)) / 2, PY(-36) + 4);
+  for (const s of [1, -1]) {
+    g.fillStyle = 'rgba(120,140,128,0.45)'; g.fillRect(PX(s * 960), PY(-33.75), PX(s * 1260) - PX(s * 960), PY(-38) - PY(-33.75));
+    g.fillStyle = '#e6f2ea'; g.textAlign = 'center'; g.fillText(s > 0 ? 'EAST YARD · GOODS SHED' : 'WEST YARD · GOODS SHED', (PX(s * 960) + PX(s * 1260)) / 2, PY(-36) + 4);
+  }
   // track
   g.lineCap = 'round'; g.lineWidth = 3; g.strokeStyle = '#b8c9bf';
   for (const s of SEGS) { g.beginPath(); g.moveTo(PX(s.x0), PY(s.z)); g.lineTo(PX(s.x1), PY(s.z)); g.stroke(); }
@@ -1988,7 +2042,7 @@ function drawPanel() {
   g.font = 'bold 10px Segoe UI'; g.fillStyle = '#e6f2ea'; g.textAlign = 'left';
   for (const c of CORR) { g.fillText(c.k, 4, PY(c.z) + 4); }
   g.textAlign = 'right'; for (const c of CORR) g.fillText(c.k, PW - 4, PY(c.z) + 4);
-  for (const [n, z] of Object.entries(LINE_Z)) { g.textAlign = 'center'; g.fillStyle = '#9fd0b5'; if (+n > 8) g.fillText(+n === GOODS_LINE ? 'GOODS' : 'Y' + (n - 8), PX(1285), PY(z) - 3); else g.fillText('L' + n + (LINE_PF[n] ? ' PF' + LINE_PF[n] : ''), PX(-190), PY(z) - 3); }
+  for (const [n, z] of Object.entries(LINE_Z)) { g.textAlign = 'center'; g.fillStyle = '#9fd0b5'; if (+n > 8) for (const s of [1, -1]) g.fillText(+n === GOODS_LINE ? 'GOODS' : 'Y' + (n - 8), PX(s * 1285), PY(z) - 3); else g.fillText('L' + n + (LINE_PF[n] ? ' PF' + LINE_PF[n] : ''), PX(-190), PY(z) - 3); }
   // predicted paths (where each train will go with the points as set)
   for (const t of trains) {
     if (t.stabled || t.crashed || !t.pred.legs.length) continue;
