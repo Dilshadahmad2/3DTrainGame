@@ -2951,7 +2951,7 @@ const selMark = (() => {
 function updateSelMark(now) {
   const t = selected, S = selMark;
   const show = !!t && trains.includes(t) && camMode !== 'driver';
-  S.g.visible = S.rib.visible = show; if (!show) return;
+  S.g.visible = show; S.rib.visible = false; if (!show) return;   // (ground glow under the train removed — arrow + name tag only)
   const key = t.number + '|' + t.name;
   if (S.key !== key) {
     S.key = key; const x = S.x; x.clearRect(0, 0, 512, 128);
@@ -2962,14 +2962,6 @@ function updateSelMark(now) {
   }
   const lp = t.loco.position, s = Math.max(1, camera.position.distanceTo(lp) / 70);
   S.g.scale.setScalar(s); S.g.position.set(lp.x, 6 + 2.2 * s + Math.sin(now * 3) * 0.5 * s, lp.z);
-  const n = S.N, hw = 2.5, d = t.dir;
-  for (let i = 0; i < n; i++) {
-    const xx = (t.p - t.length * i / (n - 1)) * d, z = t.zOf(xx), dz = t.zOf(xx + 0.6) - t.zOf(xx - 0.6), l = Math.hypot(1.2, dz);
-    const nx = -dz / l, nz = 1.2 / l;
-    S.pos.set([xx + nx * hw, 0.75, z + nz * hw, xx - nx * hw, 0.75, z - nz * hw], i * 6);
-  }
-  S.geo.attributes.position.needsUpdate = true;
-  S.rib.material.opacity = 0.35 + 0.3 * (0.5 + 0.5 * Math.sin(now * 4));
 }
 
 const perf = { frames: 0, t: 0, n: 0, shEvery: HQ ? 1 : 2 };
