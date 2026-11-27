@@ -2696,11 +2696,11 @@ function drawPanel() {
     g.strokeStyle = t.crashed ? (blink ? '#ffffff' : '#ff2a1a') : isSel ? '#ffb300' : t.stabled ? '#b06a3a' : t.type === 'shunter' ? '#e0b020' : t.type === 'light' ? '#ff7a40' : '#ff2a1a'; g.lineWidth = 7;
     path(); g.stroke();
     if (!t.stabled) { const X = PX(t.front), Y = PY(t.zOf(t.front)); g.fillStyle = '#fff'; g.beginPath(); g.moveTo(X + t.dir * 7, Y); g.lineTo(X, Y - 5); g.lineTo(X, Y + 5); g.closePath(); g.fill(); }
-    g.fillStyle = '#ffe2dc'; g.textAlign = 'center'; g.font = 'bold 10px Segoe UI';
+    // train number in very small type written on the train itself (no label boxes over the map)
     const [mx, mz] = pts[Math.floor(pts.length / 2)];
-    const lbl = t.number + (t.expLine && t.actArr == null ? ' ▸' + lineShort(t.expLine) : '');
-    if (isSel) { const w = g.measureText(lbl).width + 10; g.fillStyle = '#ffb300'; g.fillRect(PX(mx) - w / 2, PY(mz) - 18, w, 14); g.fillStyle = '#111'; }
-    g.fillText(lbl, PX(mx), PY(mz) - 7);
+    g.font = 'bold 6.5px Segoe UI'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.fillStyle = isSel ? '#1a1205' : '#ffffff'; g.fillText(t.number, PX(mx), PY(mz) + 0.5);
+    g.textBaseline = 'alphabetic';
   }
   // point number only on the crossover under the mouse (and on switched ones when zoomed in)
   const showNo = pv.zoom * (PW - 40) / (2 * MAPHALF) * 20 > 28;
