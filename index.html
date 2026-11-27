@@ -81,8 +81,8 @@ html,body{margin:0;height:100%;overflow:hidden;background:#000;font-family:'Sego
 .tdest{font-size:11px;color:#9fd0b5;margin-top:2px}
 .tpts{display:flex;gap:4px;flex-wrap:wrap;margin-top:5px;align-items:center}
 .tpts .lbl{font-size:10px;color:var(--mut)}
-.chip{font:inherit;font-size:10.5px;padding:2px 6px;border-radius:5px;border:1px solid rgba(127,224,166,0.5);background:rgba(127,224,166,0.12);color:#bff2d3;cursor:pointer}
-.chip.r{border-color:rgba(255,210,26,0.7);background:rgba(255,210,26,0.18);color:#ffe680}
+.chip{font:inherit;font-size:10.5px;padding:2px 6px;border-radius:5px;border:1px solid rgba(200,210,215,0.35);background:rgba(255,255,255,0.06);color:#d6dee2;cursor:pointer}
+.chip.r{border-color:rgba(53,226,124,0.8);background:rgba(53,226,124,0.2);color:#9ff5c2}
 #settings{position:fixed;inset:0;z-index:40;background:rgba(0,0,0,0.6);display:flex;align-items:center;justify-content:center}
 .setbox{width:440px;background:rgba(14,20,26,0.97);border:1px solid rgba(255,255,255,0.15);border-radius:12px;padding:16px 20px}
 .setbox h3{margin:0 0 10px;color:var(--acc);font-size:16px}
@@ -148,7 +148,7 @@ html,body{margin:0;height:100%;overflow:hidden;background:#000;font-family:'Sego
 </div>
 
 <div id="panelwrap" class="hud win hidden">
-  <div class="winhead"><b>Panel</b><span class="hint">click signal = ON/OFF · click ◆ = throw point N/R · wheel = zoom · drag = pan · drag corner = resize · H = hide</span><button class="btn sm" id="pzStation">Station</button><button class="btn sm" id="pzFit">Fit all</button><input type="range" class="opac" min="10" max="95" value="45" title="Transparency"></div>
+  <div class="winhead"><b>Panel</b><span class="hint">click signal = ON/OFF · click a crossover = throw point (green = set) · wheel = zoom · drag = pan · drag corner = resize · H = hide</span><button class="btn sm" id="pzStation">Station</button><button class="btn sm" id="pzFit">Fit all</button><input type="range" class="opac" min="10" max="95" value="45" title="Transparency"></div>
   <canvas id="panel"></canvas>
 </div>
 
@@ -2429,7 +2429,13 @@ function drawPanel() {
   // track
   g.lineCap = 'round'; g.lineWidth = 3; g.strokeStyle = '#b8c9bf';
   for (const s of SEGS) { g.beginPath(); g.moveTo(PX(s.x0), PY(s.z)); g.lineTo(PX(s.x1), PY(s.z)); g.stroke(); }
-  for (const c of XOVERS) { g.strokeStyle = c.fixed ? '#b8c9bf' : POINTS[c.id] === 'R' ? '#ffd21a' : 'rgba(150,175,160,0.55)'; g.lineWidth = c.fixed ? 3 : POINTS[c.id] === 'R' ? 3.5 : 2.5; strokeFn(g, c.x1, c.x2, x => sCurve(x, c.x1, c.x2, c.z1, c.z2), 14); }
+  // crossovers: a point set Reverse lights its crossover green; Normal ones stay faint. Click a crossover to throw it.
+  for (const c of XOVERS) {
+    const zf = x => sCurve(x, c.x1, c.x2, c.z1, c.z2), r = !c.fixed && POINTS[c.id] === 'R', hov = hover && hover.pt === c.id;
+    if (r) { g.strokeStyle = 'rgba(46,230,120,0.28)'; g.lineWidth = 9; strokeFn(g, c.x1, c.x2, zf, 14); }
+    g.strokeStyle = c.fixed ? '#b8c9bf' : hov ? '#ffffff' : r ? '#35e27c' : 'rgba(150,175,160,0.45)';
+    g.lineWidth = c.fixed ? 3 : hov ? 4 : r ? 3.5 : 2; strokeFn(g, c.x1, c.x2, zf, 14);
+  }
   g.font = 'bold 10px Segoe UI'; g.fillStyle = '#e6f2ea'; g.textAlign = 'left';
   for (const c of CORR) { g.fillText(c.k, 4, PY(c.z) + 4); }
   g.textAlign = 'right'; for (const c of CORR) g.fillText(c.k, PW - 4, PY(c.z) + 4);
@@ -2462,15 +2468,17 @@ function drawPanel() {
     if (isSel) { const w = g.measureText(lbl).width + 10; g.fillStyle = '#ffb300'; g.fillRect(PX(mx) - w / 2, PY(mz) - 18, w, 14); g.fillStyle = '#111'; }
     g.fillText(lbl, PX(mx), PY(mz) - 7);
   }
-  // point markers (diamonds) — click to throw
+  // point number only on the crossover under the mouse (and on switched ones when zoomed in)
   const showNo = pv.zoom * (PW - 40) / (2 * MAPHALF) * 20 > 28;
   for (const c of XOVERS) {
     if (c.fixed) continue;
-    const [x, y] = ptPos(c); if (x < -10 || x > PW + 10) continue;
     const r = POINTS[c.id] === 'R', occ = hover && hover.pt === c.id;
-    g.fillStyle = r ? '#ffd21a' : '#7fe0a6'; g.strokeStyle = occ ? '#ffffff' : 'rgba(0,0,0,0.6)'; g.lineWidth = occ ? 2 : 1;
-    g.beginPath(); g.moveTo(x, y - 5); g.lineTo(x + 5, y); g.lineTo(x, y + 5); g.lineTo(x - 5, y); g.closePath(); g.fill(); g.stroke();
-    if (showNo || occ) { g.fillStyle = '#ffffff'; g.font = '600 9px Segoe UI'; g.textAlign = 'left'; g.fillText(`${c.id}${r ? 'R' : 'N'}`, x + 7, y + 3); }
+    if (!occ && !(showNo && r)) continue;
+    const [x, y] = ptPos(c); if (x < -10 || x > PW + 10) continue;
+    g.font = '600 10px Segoe UI'; g.textAlign = 'left';
+    const t = `${c.id} ${r ? 'Reverse' : 'Normal'}`, w = g.measureText(t).width + 8;
+    g.fillStyle = 'rgba(10,16,20,0.85)'; g.fillRect(x + 6, y - 9, w, 14);
+    g.fillStyle = r ? '#35e27c' : '#ffffff'; g.fillText(t, x + 10, y + 2);
   }
   // signals
   for (const s of signals) {
@@ -2487,8 +2495,11 @@ function panelHit(e) {
   const r = pc.getBoundingClientRect(), mx = e.clientX - r.left, my = e.clientY - r.top;
   const sig = signals.find(s => { const [x, y] = sigPos(s); return Math.hypot(mx - x, my - y) < 8; });
   if (sig) return { sig };
-  let best = null, bd = 9;
-  for (const c of XOVERS) { if (c.fixed) continue; const [x, y] = ptPos(c), d = Math.hypot(mx - x, my - y); if (d < bd) { bd = d; best = c; } }
+  let best = null, bd = 8;   // nearest crossover line under the pointer
+  for (const c of XOVERS) {
+    if (c.fixed || PX(c.x2) < mx - 12 || PX(c.x1) > mx + 12) continue;
+    for (let i = 0; i <= 12; i++) { const x = c.x1 + (c.x2 - c.x1) * i / 12, d = Math.hypot(mx - PX(x), my - PY(sCurve(x, c.x1, c.x2, c.z1, c.z2))); if (d < bd) { bd = d; best = c; } }
+  }
   return best ? { pt: best.id } : null;
 }
 let pdrag = null;
