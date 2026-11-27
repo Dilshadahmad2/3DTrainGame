@@ -1686,10 +1686,10 @@ function buildSignal(sig) {
   scene.add(grp);
   sig.lamps = lamps; sig.sprite = spr; sig.lampY = lampY;
 }
-// Indian Railways sequence on every main track, each direction: Outer (1.8 km) → Home (1.05 km, between the two
-// crossover ladders) → Starter (end of platform) → Advanced Starter (1.05 km out). A route only locks as far as
+// Indian Railways sequence on every main track, each direction: Outer (1.8 km) → Home (530 m, close to the platforms,
+// before the inner crossover ladder) → Starter (end of platform) → Advanced Starter (530 m out). A route only locks as far as
 // the next signal, so the sections are short and more trains can move at the same time.
-const INNER_U = 1050;
+const INNER_U = 530;   // just outside the throat where Lines 1, 2, 7, 8 join the main tracks, before the first ladder
 for (const c of CORR) for (const dir of [1, -1]) {
   const e = dir > 0 ? 'E' : 'W';
   signals.push({ id: `O${c.k}${e}`, kind: 'home', outer: true, dir, track: c.z, x: -dir * c.home, z: c.z - dir * 2.3, cleared: false, aspect: 0, routeLine: null });
