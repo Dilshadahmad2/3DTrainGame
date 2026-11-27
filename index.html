@@ -231,8 +231,8 @@ const GPU_NAME = (() => {
 const WEAK_GPU = /intel|hd graphics|uhd|iris|mali|adreno|powervr|swiftshader|llvmpipe|apple gpu/i.test(GPU_NAME) || (navigator.hardwareConcurrency || 8) <= 4;
 const savedQ = LS.get('smq');
 let HQ = savedQ ? savedQ !== 'low' : !WEAK_GPU;
-const renderer = new THREE.WebGLRenderer({ antialias: HQ, powerPreference: 'high-performance' });
-const MAX_PR = Math.min(devicePixelRatio, HQ ? 1.5 : 1);
+const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+const MAX_PR = Math.min(devicePixelRatio, HQ ? 2 : 1.25), MIN_PR = Math.min(1, MAX_PR);   // never below the screen's real pixels (that is what looked blurry)
 let curPR = MAX_PR;
 renderer.setPixelRatio(curPR);
 renderer.setSize(innerWidth, innerHeight);
@@ -246,7 +246,7 @@ const maxAniso = renderer.capabilities.getMaxAnisotropy();
 const scene = new THREE.Scene();
 scene.fog = new THREE.Fog(0xb6c6d6, 450, 3300);
 const camera = new THREE.PerspectiveCamera(52, innerWidth / innerHeight, 0.4, 14000);
-camera.position.set(-170, 55, -140);
+camera.position.set(-40, 55, 160);
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.target.set(20, 2, 6);
 controls.enableDamping = true;
@@ -576,13 +576,16 @@ const pfLights = []; // kept empty: lamp glow sprites are used instead of real l
 //  Trains simply follow the points as they are set.
 // =====================================================================
 // Station (south -> north): Line 1 loop · Line 2 PF1 · Line 3 PF2 · Line 4 PF3 · Line 5 PF4 · Line 6 PF5 · Line 7 loop · Line 8 loop
-// Yards (separate, south of the station, one at EACH end): lead off Line 1 -> Yard 1, 2, 3 + Goods line,
-// and each yard's far end joins corridor track A, so a train can enter a yard from either side, before or after the platforms
-const LINE_Z = { 1: 0, 2: 5, 3: 15, 4: 20, 5: 30, 6: 35, 7: 45, 8: 50, 9: -14, 10: -20, 11: -26, 12: -32 };
+// Yard (east, on the PF1 side): Yard 1, 2, 3 + Goods line, through to corridor track A at its far end (point 308).
+// A separate goods RUNNING LINE (Line 13) comes from the far west (point 309), runs past the station on the yard side
+// (behind the station building), and leads into the yard; more links: 310/311 west of the station, 301 at the east throat.
+const RUN_LINE = 13;
+const LINE_Z = { 1: 0, 2: 5, 3: 15, 4: 20, 5: 30, 6: 35, 7: 45, 8: 50, 9: -14, 10: -20, 11: -26, 12: -32, 13: -12 };
 const Z_LINE = Object.fromEntries(Object.entries(LINE_Z).map(([n, z]) => [z, +n]));
+Z_LINE[-70] = RUN_LINE;                 // the running line's section behind the station building
 const GOODS_LINE = 12, YARD_LINES = [9, 10, 11, 12];
-const lineName = n => n <= 8 ? `Line ${n}` : n === GOODS_LINE ? 'Goods line' : `Yard ${n - 8}`;
-const lineKind = n => LINE_PF[n] ? `PF ${LINE_PF[n]}` : n === GOODS_LINE ? 'goods shed' : n > 8 ? 'yard' : 'loop';
+const lineName = n => n <= 8 ? `Line ${n}` : n === RUN_LINE ? 'Running line' : n === GOODS_LINE ? 'Goods line' : `Yard ${n - 8}`;
+const lineKind = n => LINE_PF[n] ? `PF ${LINE_PF[n]}` : n === RUN_LINE ? 'goods running line' : n === GOODS_LINE ? 'goods shed' : n > 8 ? 'yard' : 'loop';
 const LINE_PF = { 2: 1, 3: 2, 4: 3, 5: 4, 6: 5 };            // line -> platform number (others are loops)
 const CORR = [{ k: 'A', z: 0, home: 1750 }, { k: 'B', z: 5, home: 1250 }, { k: 'C', z: 10, home: 1650 }, { k: 'D', z: 15, home: 1100 }, { k: 'E', z: 20, home: 1850 }];
 const STARTER_U = 172, HALT_U = 158, END_U = TRACK_HALF;
@@ -592,7 +595,9 @@ const SEGS = [
   { z: 10, x0: -END_U, x1: -490 }, { z: 10, x0: 490, x1: END_U },
   { z: 30, x0: -740, x1: 740 }, { z: 35, x0: -640, x1: 640 }, { z: 45, x0: -520, x1: 520 }, { z: 50, x0: -440, x1: 440 },
 ];
-for (const [z, a, b] of [[-14, 570, 1540], [-20, 780, 1460], [-26, 860, 1380], [-32, 940, 1300]]) SEGS.push({ z, x0: a, x1: b }, { z, x0: -b, x1: -a });
+for (const [z, a, b] of [[-14, 680, 1540], [-20, 780, 1460], [-26, 860, 1380], [-32, 940, 1300]]) SEGS.push({ z, x0: a, x1: b });
+// running line: west of the station, behind the station building, and east of the station up to the yard
+SEGS.push({ z: -12, x0: -1620, x1: -430 }, { z: -70, x0: -270, x1: 270 }, { z: -12, x0: 430, x1: 620 });
 const XOVERS = [], POINTS = {};
 {
   // [z inner, u inner, z outer, u outer]
@@ -618,19 +623,23 @@ for (const side of [-1, 1]) {
   const c = { id: side > 0 ? '241' : '141', x1: side > 0 ? 395 : -455, z1: side > 0 ? 5 : 0, x2: side > 0 ? 455 : -395, z2: side > 0 ? 0 : 5, side };
   XOVERS.push(c); POINTS[c.id] = 'N';
 }
-// yards: a lead leaves Line 1 beyond each end of the station (point 301 east / 401 west), splits into Yard 1–3 and the Goods line;
-// at the far end each yard joins corridor track A again (point 308 east / 408 west) — so both yards are THROUGH yards:
-//   from the West: before the platforms -> 408 into the West yard · after the platforms -> 301 into the East yard
-//   from the East: before the platforms -> 308 into the East yard · after the platforms -> 401 into the West yard
-// and a train that has gone past a yard point can stop and use "Reverse" to shunt back into the yard.
-for (const side of [1, -1]) {
-  let n = side > 0 ? 300 : 400;
-  for (const [zi, ui, zo, uo] of [[0, 490, -14, 570], [-14, 720, -20, 780], [-20, 800, -26, 860], [-26, 880, -32, 940],
-    [-32, 1300, -26, 1360], [-26, 1380, -20, 1440], [-20, 1460, -14, 1520], [-14, 1540, 0, 1640]]) {
-    n++;
-    const pA = { x: side * ui, z: zi }, pB = { x: side * uo, z: zo }, [P1, P2] = pA.x < pB.x ? [pA, pB] : [pB, pA];
-    const c = { id: String(n), x1: P1.x, z1: P1.z, x2: P2.x, z2: P2.z, side }; XOVERS.push(c); POINTS[c.id] = 'N';
-  }
+// yard + running line (x1 < x2 always; an eastbound train enters a crossover at x1, a westbound one at x2):
+//   from the West, before the platforms: 309 (track A -> running line) or 310 (Line 1 -> running line), then past the station into the yard
+//   from the West, after the platforms:  301 (Line 1 -> running line -> yard)
+//   from the East, before the platforms: 308 (track A -> far end of the yard)
+//   from the East, after the platforms:  311 puts it on the running line; stop it and ⇄ Reverse to shunt back to the yard
+//   inside the yard: 302-304 / 305-307 ladders between Yard 1, 2, 3 and the Goods line
+// K1-K3 are fixed curves (no points): the running line dodging round the station building and joining Yard 1.
+{
+  const add = (id, x1, z1, x2, z2, fixed = false) => { const c = { id, x1, z1, x2, z2, side: Math.sign(x1 + x2) || 1, fixed }; XOVERS.push(c); POINTS[id] = 'N'; };
+  add('301', 490, 0, 570, -12);
+  add('302', 720, -14, 780, -20); add('303', 800, -20, 860, -26); add('304', 880, -26, 940, -32);
+  add('305', 1300, -32, 1360, -26); add('306', 1380, -26, 1440, -20); add('307', 1460, -20, 1520, -14);
+  add('308', 1540, -14, 1640, 0);
+  add('309', -1700, 0, -1620, -12);
+  add('310', -700, 0, -620, -12);
+  add('311', -1000, -12, -920, 0);
+  add('K1', -430, -12, -270, -70, true); add('K2', 270, -70, 430, -12, true); add('K3', 620, -12, 680, -14, true);
 }
 const XO_BY_ID = Object.fromEntries(XOVERS.map(c => [c.id, c]));
 function segAt(z, x) { return SEGS.find(s => Math.abs(s.z - z) < 0.01 && x >= s.x0 - 0.6 && x <= s.x1 + 0.6); }
@@ -686,7 +695,7 @@ function legZ(legs, p) {
     m.rotation.x = -Math.PI / 2; m.position.set(x, y, z); m.receiveShadow = true; scene.add(m);
   };
   gravel(1700, 62, 0, 25, 0.012);
-  gravel(1110, 36, 1100, -22, 0.014); gravel(1110, 36, -1100, -22, 0.014);
+  gravel(1110, 36, 1100, -22, 0.014);
   gravel(TRACK_HALF * 2, 28, 0, 10, 0.008);
 
   const sh = new THREE.Shape(); sh.moveTo(-2.45, 0); sh.lineTo(2.45, 0); sh.lineTo(1.75, 0.4); sh.lineTo(-1.75, 0.4); sh.closePath();
@@ -724,6 +733,7 @@ function legZ(legs, p) {
       cb.beam(ballastPlain, a.clone().setY(0.2), b.clone().addScaledVector(t, 0.4).setY(0.2), 0.4, 3.6);
     }
     // point machines beside both switches
+    if (c.fixed) continue;
     const away = Math.sign(c.z2 - c.z1);
     for (const [x, z, s] of [[c.x1, c.z1, -away], [c.x2, c.z2, away]]) {
       cb.box(MAT.darkMetal, x, 0.55, z + s * 2.05, 1.3, 0.38, 0.5);
@@ -976,7 +986,7 @@ const stationB = new Builder();
   stair(-6.2, PLAT_Y); stair(10, PLAT_Y); stair(25, PLAT_Y); stair(38.9, PLAT_Y);
 
   // ----- Goods shed (माल गोदाम) in each yard, beside the goods line -----
-  for (const gx of [1110, -1110]) {
+  for (const gx of [1110]) {
     const gl = 300, gz0 = -33.75, gz1 = -40;
     const top = new THREE.MeshStandardMaterial({ map: texRepeat(concreteTex, gl / 3, 2), roughness: 0.92 });
     const pm = new THREE.Mesh(new THREE.BoxGeometry(gl, PLAT_Y, gz0 - gz1), [MAT.wall, MAT.wall, top, MAT.wall, MAT.wall, MAT.wall]);
@@ -1045,7 +1055,9 @@ const stationB = new Builder();
   const ALLZ = [0, 5, 10, 15, 20, 30, 35, 45, 50];
   for (let x = -TRACK_HALF + 40; x < TRACK_HALF; x += 60) {
     if (Math.abs(x - 125) < 4) continue;
-    const u = Math.abs(x), z1 = -2.45, z2 = u < 540 ? 52.6 : u < 760 ? 37.6 : 22.6;
+    const u = Math.abs(x), z2 = u < 540 ? 52.6 : u < 760 ? 37.6 : 22.6;
+    // where a curve to the running line / yard leaves Line 1, the portal's south mast stands beyond it
+    const z1 = XOVERS.some(c => (c.z1 < 0 || c.z2 < 0) && (c.z1 === 0 || c.z2 === 0) && x > c.x1 - 8 && x < c.x2 + 8) ? -16 : -2.45;
     const poles = [z1, z2]; if (u < 150) poles.push(10, 25);
     for (const z of poles) { b.box(MAT.pole, x, beamY / 2, z, 0.32, beamY + 0.5, 0.32); b.box(MAT.concreteDark, x, 0.25, z, 0.9, 0.5, 0.9); }
     b.box(MAT.pole, x, beamY, (z1 + z2) / 2, 0.28, 0.4, z2 - z1);
@@ -1058,8 +1070,14 @@ const stationB = new Builder();
     }
   }
   // yard portals
-  for (const side of [1, -1]) for (let u = 580; u <= 1530; u += 55) {
-    const x = side * u;
+  // running line masts (single cantilever on the outer side)
+  for (const s of SEGS) if (s.z === -12 || s.z === -70) for (let x = s.x0 + 20; x < s.x1; x += 60) {
+    const pz = s.z - 3.4;
+    b.box(MAT.pole, x, beamY / 2, pz, 0.28, beamY + 0.5, 0.28); b.box(MAT.concreteDark, x, 0.25, pz, 0.8, 0.5, 0.8);
+    b.box(MAT.pole, x, beamY, s.z - 1.4, 0.2, 0.25, 4.4);
+    b.box(MAT.pole, x, (wireY + beamY) / 2, s.z, 0.06, beamY - wireY, 0.06); b.box(MAT.pole, x, wireY + 0.05, s.z, 0.05, 0.05, 0.9);
+  }
+  for (let x = 700; x <= 1530; x += 55) {
     for (const z of [-8.5, -37]) { b.box(MAT.pole, x, beamY / 2, z, 0.3, beamY + 0.5, 0.3); b.box(MAT.concreteDark, x, 0.25, z, 0.8, 0.5, 0.8); }
     b.box(MAT.pole, x, beamY, -22.75, 0.26, 0.36, 28.5);
     for (const z of [-14, -20, -26, -32]) if (segAt(z, x)) { b.box(MAT.pole, x, (wireY + beamY) / 2, z, 0.06, beamY - wireY, 0.06); b.box(MAT.pole, x, wireY + 0.05, z, 0.05, 0.05, 0.9); }
@@ -1142,6 +1160,7 @@ function nearVillage(x, z) { return villageCenters.some(([vx, vz]) => Math.hypot
     if (z > -62 && z < -8 && x > -100 && x < 260) continue;
     if (z > -62 && z < -4 && Math.abs(x) > 330 && Math.abs(x) < 1660) continue;   // yards and goods sheds
     if (z > -60 && z < -46) continue; // road
+    if (z < -4 && (SEGS.some(s => s.z < 0 && x > s.x0 - 8 && x < s.x1 + 8 && Math.abs(z - s.z) < 7) || XOVERS.some(c => (c.z1 < 0 || c.z2 < 0) && x > c.x1 - 8 && x < c.x2 + 8 && Math.abs(z - sCurve(x, c.x1, c.x2, c.z1, c.z2)) < 7))) continue;   // running line / yard
     const nearTrack = Math.abs(z) < 120;
     if (!nearTrack && rand() < 0.35) continue;
     const s = rr(2.2, 4.8), h = rr(2.5, 6.5);
@@ -1351,7 +1370,7 @@ const COACH_LIVERY = {
   SLR: { base: '#a01d1b', band: '#efe2b2', pin: '#a01d1b', code: 'SLR', roof: 0xd6d0bd },
 };
 function coachTextures(kind) {
-  const W = HQ ? 2048 : 1024, H = W / 8, cfg = COACH_LIVERY[kind];
+  const W = 2048, H = W / 8, cfg = COACH_LIVERY[kind];
   const [c, g] = makeCanvas(W, H); const [ce, e] = makeCanvas(W, H);
   const X = f => f * W, Y = f => f * H;
   g.fillStyle = cfg.base; g.fillRect(0, 0, W, H);
@@ -1554,7 +1573,7 @@ const PROTO = {
 const stripeTex = (() => { const [c, g] = makeCanvas(16, 128); for (let i = 0; i < 8; i++) { g.fillStyle = i % 2 ? '#111' : '#f2f2f2'; g.fillRect(0, i * 16, 16, 16); } return toTex(c, { wrap: false }); })();
 const postMat = new THREE.MeshStandardMaterial({ map: stripeTex, roughness: 0.6 });
 const ASPECT_COL = [0xff2a1a, 0xffc21a, 0x2aff5a];
-const digitMats = ['', '1', '2', '3', '4', '5', '6', '7', '8', 'Y1', 'Y2', 'Y3', 'G'].map(d => new THREE.MeshBasicMaterial({ map: signTex(64, 64, '#060606', d ? [{ text: d, font: 'bold 50px Arial', color: '#fff6d8', y: 0.56 }] : [], null) }));
+const digitMats = ['', '1', '2', '3', '4', '5', '6', '7', '8', 'Y1', 'Y2', 'Y3', 'G', 'RL'].map(d => new THREE.MeshBasicMaterial({ map: signTex(64, 64, '#060606', d ? [{ text: d, font: 'bold 50px Arial', color: '#fff6d8', y: 0.56 }] : [], null) }));
 const signals = [];
 const signalHits = [];
 function buildSignal(sig) {
@@ -1667,10 +1686,10 @@ const EXP_CATS = [['Rajdhani Express', '12'], ['Shatabdi Express', '12'], ['Duro
 const NAMED = ['Ganga Sagar Express', 'Kashi Vishwanath Express', 'Mahabodhi Express', 'Brahmaputra Mail', 'Kalinga Utkal Express', 'Godavari Express', 'Narmada Express', 'Vaishali Express', 'Purushottam Express', 'Saryu Yamuna Express', 'Tamil Nadu Express', 'Gitanjali Express', 'Marudhar Express', 'Poorva Express'];
 const JOB_LABEL = { stop: 'Stops here', through: 'Runs through', terminate: 'Terminates here', originate: 'Starts from here', unload: 'Unload at goods shed', stable: 'Stable in yard', none: '' };
 function defaultExpLine(t) {
-  if (t.type === 'goods') return t.job === 'unload' ? GOODS_LINE : t.job === 'stable' ? pickR([9, 11]) : pickR([1, 7, 8]);
+  if (t.type === 'goods') return t.job === 'unload' ? GOODS_LINE : t.job === 'stable' ? pickR([9, 11]) : pickR([1, 7, 8, 13]);
   return pickR([2, 3, 4, 5, 6]);
 }
-const lineShort = n => LINE_PF[n] ? 'PF ' + LINE_PF[n] : n === GOODS_LINE ? 'Goods' : n > 8 ? 'Y' + (n - 8) : 'L' + n;
+const lineShort = n => LINE_PF[n] ? 'PF ' + LINE_PF[n] : n === RUN_LINE ? 'RL' : n === GOODS_LINE ? 'Goods' : n > 8 ? 'Y' + (n - 8) : 'L' + n;
 const pickR = a => a[Math.floor(Math.random() * a.length)];
 const digits = n => String(Math.floor(Math.random() * 10 ** n)).padStart(n, '0');
 function pickJob(type) {
@@ -1891,8 +1910,8 @@ class Train {
       }
       if (this.yardT <= 0) {
         this.holdT = 20; this.updateShunting();
-        const east = this.front > 0, out = (this.dir > 0) === east ? `via point ${east ? 308 : 408} to track A` : `via the lead (point ${east ? 301 : 401}) to Line 1`;
-        log(`${this.number}: yard work finished — ready to leave the ${east ? 'East' : 'West'} yard towards the ${this.dir > 0 ? 'East' : 'West'} ${out}.`, 'warn');
+        const out = this.dir > 0 ? 'via point 308 to track A' : 'over the running line — point 301 to Line 1, or on behind the station to 310/311/309';
+        log(`${this.number}: yard work finished — ready to leave the yard towards the ${this.dir > 0 ? 'East' : 'West'} ${out}.`, 'warn');
       }
       return;
     }
@@ -2061,7 +2080,7 @@ function pointOccupiedBy(c) {
 }
 function togglePoint(id) {
   if (!state.running) return;
-  const c = XO_BY_ID[id]; if (!c) return;
+  const c = XO_BY_ID[id]; if (!c || c.fixed) return;
   const occ = pointOccupiedBy(c);
   if (occ) { toast(`Point ${id} is occupied by ${occ.number}`); beep(180); return; }
   POINTS[id] = POINTS[id] === 'N' ? 'R' : 'N';
@@ -2122,15 +2141,15 @@ function trySpawn() {
 }
 // each yard starts with a WDS-6 shunter on Yard 3 and an empty BOXN rake stabled on Yard 2
 function setupYards() {
-  for (const s of [1, -1]) {
+  for (const s of [1]) {
     const rake = new Train('stabled', s, LINE_Z[10], 0, { cars: makeCars(Array(14).fill('BOXN')) });
     rake.resetTo(-1300, LINE_Z[10]); rake.p = 1300; rake.legs = [{ p0: -Infinity, p1: Infinity, za: LINE_Z[10], zb: LINE_Z[10] }];
     rake.name = 'Empty BOXN rake — stabled'; rake.rakeType = 'goods'; rake.inYard = true; rake.sync();
     const sh = new Train('shunter', -s, LINE_Z[10], 1330, { job: 'none', expLine: 0 });   // on Yard 2 beyond the rake, facing it
-    sh.v = 0; sh.stopReq = true; sh.flags.whistle = true; sh.baseName = sh.name = `${s > 0 ? 'East' : 'West'} yard shunter`; sh.sync();
+    sh.v = 0; sh.stopReq = true; sh.flags.whistle = true; sh.baseName = sh.name = 'Yard shunter'; sh.sync();
     trains.push(rake, sh);
   }
-  log('Yards: each yard has a WDS-6 shunter and an empty BOXN rake on Yard 2. Shunter card: ▶ Go (it creeps up to the rake) → 🔗 Couple → ⇄ Reverse to haul it out through the far end and track A, or ▶ Go to propel it out via Line 1.', 'warn');
+  log('Yard: a WDS-6 shunter and an empty BOXN rake stand on Yard 2. Shunter card: ▶ Go (it creeps up to the rake) → 🔗 Couple → ⇄ Reverse to haul it out through point 308 to track A, or ▶ Go to propel it out over the running line.', 'warn');
 }
 // stabled rakes standing on the corridor — you have to route trains around them
 function placeStabled() {
@@ -2246,7 +2265,7 @@ function cardFor(t) {
     <div class="tpts"></div>`;
   const sel = el.querySelector('.pfsel');
   if (t.stabled) el.querySelector('.pfl').style.display = 'none';
-  else sel.innerHTML = (t.type === 'goods' ? [1, 7, 8, 9, 10, 11, 12] : [2, 3, 4, 5, 6]).map(n => `<option value="${n}">${LINE_PF[n] ? 'Platform ' + LINE_PF[n] : lineName(n)}</option>`).join('');
+  else sel.innerHTML = (t.type === 'goods' ? [1, 7, 8, 13, 9, 10, 11, 12] : [2, 3, 4, 5, 6]).map(n => `<option value="${n}">${LINE_PF[n] ? 'Platform ' + LINE_PF[n] : lineName(n)}</option>`).join('');
   cards.set(t, el); return el;
 }
 function nextSignalOf(t) {
@@ -2385,7 +2404,8 @@ const pv = { zoom: 1, pan: 0 };
 const mapU = x => { const u = Math.abs(x); return Math.sign(x) * (u <= 650 ? u : 650 + (u - 650) * 0.33); };
 const MAPHALF = 650 + (TRACK_HALF - 650) * 0.33;
 const PX = x => PW / 2 + (mapU(x) - pv.pan) * pv.zoom * (PW - 40) / (2 * MAPHALF);
-const PY = z => 26 + (z + 36) / 92 * (PH - 40);
+const zMap = z => z >= -36 ? z : -36 + (z + 36) * 0.25;   // squeeze the running line behind the station into view
+const PY = z => 26 + (zMap(z) + 46) / 102 * (PH - 40);
 function sizePanel() { const r = pc.getBoundingClientRect(); if (!r.width) return; PW = r.width; PH = r.height; pc.width = PW * devicePixelRatio; pc.height = PH * devicePixelRatio; }
 new ResizeObserver(sizePanel).observe(pc);
 function sigPos(s) { return [PX(s.x), PY(s.track) + (s.dir > 0 ? -9 : 9)]; }
@@ -2402,18 +2422,19 @@ function drawPanel() {
     g.fillRect(PX(-160), PY(z0), PX(160) - PX(-160), PY(z1) - PY(z0));
     g.fillStyle = '#e6f2ea'; g.textAlign = 'center'; g.font = '600 10px Segoe UI'; g.fillText(label, PX(0), (PY(z0) + PY(z1)) / 2 + 4); g.fillStyle = 'rgba(120,140,128,0.45)';
   }
-  for (const s of [1, -1]) {
-    g.fillStyle = 'rgba(120,140,128,0.45)'; g.fillRect(PX(s * 960), PY(-33.75), PX(s * 1260) - PX(s * 960), PY(-38) - PY(-33.75));
-    g.fillStyle = '#e6f2ea'; g.textAlign = 'center'; g.fillText(s > 0 ? 'EAST YARD · GOODS SHED' : 'WEST YARD · GOODS SHED', (PX(s * 960) + PX(s * 1260)) / 2, PY(-38) - 2);
-  }
+  g.fillStyle = 'rgba(120,140,128,0.45)'; g.fillRect(PX(960), PY(-33.75), PX(1260) - PX(960), PY(-38) - PY(-33.75));
+  g.fillStyle = '#e6f2ea'; g.textAlign = 'center'; g.fillText('YARD · GOODS SHED', (PX(960) + PX(1260)) / 2, PY(-38) - 2);
+  g.fillStyle = 'rgba(120,140,128,0.3)'; g.fillRect(PX(-60), PY(-28), PX(60) - PX(-60), PY(-10) - PY(-28));
+  g.fillStyle = '#e6f2ea'; g.fillText('STATION', PX(0), PY(-19) + 4);
   // track
   g.lineCap = 'round'; g.lineWidth = 3; g.strokeStyle = '#b8c9bf';
   for (const s of SEGS) { g.beginPath(); g.moveTo(PX(s.x0), PY(s.z)); g.lineTo(PX(s.x1), PY(s.z)); g.stroke(); }
-  for (const c of XOVERS) { g.strokeStyle = POINTS[c.id] === 'R' ? '#ffd21a' : 'rgba(150,175,160,0.55)'; g.lineWidth = POINTS[c.id] === 'R' ? 3.5 : 2.5; strokeFn(g, c.x1, c.x2, x => sCurve(x, c.x1, c.x2, c.z1, c.z2), 14); }
+  for (const c of XOVERS) { g.strokeStyle = c.fixed ? '#b8c9bf' : POINTS[c.id] === 'R' ? '#ffd21a' : 'rgba(150,175,160,0.55)'; g.lineWidth = c.fixed ? 3 : POINTS[c.id] === 'R' ? 3.5 : 2.5; strokeFn(g, c.x1, c.x2, x => sCurve(x, c.x1, c.x2, c.z1, c.z2), 14); }
   g.font = 'bold 10px Segoe UI'; g.fillStyle = '#e6f2ea'; g.textAlign = 'left';
   for (const c of CORR) { g.fillText(c.k, 4, PY(c.z) + 4); }
   g.textAlign = 'right'; for (const c of CORR) g.fillText(c.k, PW - 4, PY(c.z) + 4);
-  for (const [n, z] of Object.entries(LINE_Z)) { g.textAlign = 'center'; g.fillStyle = '#9fd0b5'; if (+n > 8) { const x0 = SEGS.find(sg => sg.z === z && sg.x0 > 0).x0; g.textAlign = 'right'; g.fillText(+n === GOODS_LINE ? 'GOODS' : 'Y' + (n - 8), PX(x0) - 4, PY(z) + 3); g.textAlign = 'left'; g.fillText(+n === GOODS_LINE ? 'GOODS' : 'Y' + (n - 8), PX(-x0) + 4, PY(z) + 3); } else g.fillText('L' + n + (LINE_PF[n] ? ' PF' + LINE_PF[n] : ''), PX(-190), PY(z) - 3); }
+  for (const [n, z] of Object.entries(LINE_Z)) { g.textAlign = 'center'; g.fillStyle = '#9fd0b5'; if (+n === RUN_LINE) { g.textAlign = 'left'; g.fillText('RUNNING LINE', PX(-1600), PY(z) - 4); }
+    else if (+n > 8) { const x0 = SEGS.find(sg => sg.z === z && sg.x0 > 0).x0; g.textAlign = 'right'; g.fillText(+n === GOODS_LINE ? 'GOODS' : 'Y' + (n - 8), PX(x0) - 4, PY(z) + 3); } else g.fillText('L' + n + (LINE_PF[n] ? ' PF' + LINE_PF[n] : ''), PX(-190), PY(z) - 3); }
   // predicted paths (where each train will go with the points as set)
   for (const t of trains) {
     if (t.stabled || t.crashed || !t.pred.legs.length) continue;
@@ -2444,6 +2465,7 @@ function drawPanel() {
   // point markers (diamonds) — click to throw
   const showNo = pv.zoom * (PW - 40) / (2 * MAPHALF) * 20 > 28;
   for (const c of XOVERS) {
+    if (c.fixed) continue;
     const [x, y] = ptPos(c); if (x < -10 || x > PW + 10) continue;
     const r = POINTS[c.id] === 'R', occ = hover && hover.pt === c.id;
     g.fillStyle = r ? '#ffd21a' : '#7fe0a6'; g.strokeStyle = occ ? '#ffffff' : 'rgba(0,0,0,0.6)'; g.lineWidth = occ ? 2 : 1;
@@ -2466,7 +2488,7 @@ function panelHit(e) {
   const sig = signals.find(s => { const [x, y] = sigPos(s); return Math.hypot(mx - x, my - y) < 8; });
   if (sig) return { sig };
   let best = null, bd = 9;
-  for (const c of XOVERS) { const [x, y] = ptPos(c), d = Math.hypot(mx - x, my - y); if (d < bd) { bd = d; best = c; } }
+  for (const c of XOVERS) { if (c.fixed) continue; const [x, y] = ptPos(c), d = Math.hypot(mx - x, my - y); if (d < bd) { bd = d; best = c; } }
   return best ? { pt: best.id } : null;
 }
 let pdrag = null;
@@ -2516,7 +2538,7 @@ function setView(mode) {
   camMode = mode; tween = null;
   controls.enabled = mode !== 'driver'; controls.enableZoom = true; controls.enablePan = true;
   controls.rotateSpeed = 1; controls.minDistance = 4; controls.maxDistance = 1400; controls.maxPolarAngle = Math.PI * 0.48;
-  if (mode === 'overview') flyTo(V(-170, 55, -140), V(20, 2, 6));
+  if (mode === 'overview') flyTo(V(-20, 48, 140), V(25, 2, -2));   // from the north: West on the left, yard at the back
   if (mode === 'cabin' || mode === 'platform') {
     const p = mode === 'cabin' ? V(226, 6.1, -15.2) : V(-75, PLAT_Y + 1.65, -3.4);
     const look = mode === 'cabin' ? V(140, 2, 8) : V(160, 2.5, 3);
@@ -2526,7 +2548,7 @@ function setView(mode) {
   }
   if (mode === 'follow') {
     const tp = selected.loco.position.clone().add(V(0, 3, 0));
-    camera.position.copy(tp).add(V(-selected.dir * 38, 14, -24)); controls.target.copy(tp); lastFollow.copy(tp);
+    camera.position.copy(tp).add(V(-selected.dir * 38, 14, 24)); controls.target.copy(tp); lastFollow.copy(tp);
   }
   document.querySelectorAll('#views .btn').forEach(b => b.classList.toggle('on', b.dataset.view === mode));
 }
@@ -2688,8 +2710,8 @@ function updateSelMark(now) {
   S.rib.material.opacity = 0.35 + 0.3 * (0.5 + 0.5 * Math.sin(now * 4));
 }
 
-const perf = { frames: 0, t: 0, n: 0 };
-if (!HQ) renderer.shadowMap.autoUpdate = false;
+const perf = { frames: 0, t: 0, n: 0, shEvery: HQ ? 1 : 2 };
+renderer.shadowMap.autoUpdate = false;
 const clock = new THREE.Clock();
 let uiT = 0, panelT = 0, lastClockMin = -1;
 const _v = new THREE.Vector3(), _v2 = new THREE.Vector3(), shTarget = new THREE.Vector3();
@@ -2732,11 +2754,12 @@ function frame() {
   perf.frames++; perf.t += dt;
   if (perf.t >= 1) {
     const fps = perf.frames / perf.t; perf.frames = 0; perf.t = 0;
-    if (fps < 38 && curPR > 0.6) { curPR = Math.max(0.6, +(curPR - 0.1).toFixed(2)); renderer.setPixelRatio(curPR); }
-    else if (fps > 57 && curPR < MAX_PR) { curPR = Math.min(MAX_PR, +(curPR + 0.05).toFixed(2)); renderer.setPixelRatio(curPR); }
+    // too slow: first refresh shadows less often, then (only on high-DPI screens) drop the extra resolution
+    if (fps < 36) { if (perf.shEvery < 4) perf.shEvery++; else if (curPR > MIN_PR) { curPR = Math.max(MIN_PR, +(curPR - 0.1).toFixed(2)); renderer.setPixelRatio(curPR); } }
+    else if (fps > 55) { if (curPR < MAX_PR) { curPR = Math.min(MAX_PR, +(curPR + 0.05).toFixed(2)); renderer.setPixelRatio(curPR); } else if (perf.shEvery > (HQ ? 1 : 2)) perf.shEvery--; }
     $('qBtn').textContent = `Graphics: ${HQ ? 'High' : 'Low'}${savedQ ? '' : ' (auto)'} · ${Math.round(fps)} fps`;
   }
-  if (!HQ) renderer.shadowMap.needsUpdate = (perf.n = (perf.n + 1) % 2) === 0;
+  renderer.shadowMap.needsUpdate = (perf.n = (perf.n + 1) % perf.shEvery) === 0;
   for (const t of trains) if (t.headSprite) { t.headSprite.scale.setScalar(2.2 + lampLevel * 5); t.headSprite.visible = !(camMode === 'driver' && t === selected); }
   // UI
   uiT -= dt; panelT -= dt;
