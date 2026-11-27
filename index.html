@@ -165,7 +165,7 @@ html,body{margin:0;height:100%;overflow:hidden;background:#000;font-family:'Sego
     <button class="btn" data-tod="evening">🌇 Evening</button>
     <button class="btn" data-tod="night">🌙 Night</button>
   </div>
-  <div class="btns"><button class="btn" id="setBtn">⚙ Settings</button><button class="btn" id="qBtn">HQ</button><button class="btn" id="muteBtn">🔊</button></div>
+  <div class="btns"><button class="btn" id="setBtn">⚙ Settings</button><button class="btn" id="qBtn">HQ</button><button class="btn" id="muteBtn">🔊</button><button class="btn" id="voiceBtn" title="Spoken Hindi announcements on / off">🗣 हिंदी</button></div>
 </div>
 
 <div id="views" class="hud btns hidden">
@@ -1912,12 +1912,41 @@ function makeTrainName(type, job) {
 }
 function announceArrival(t, line) {
   if (t.type === 'goods' || !t.halts || !LINE_PF[line]) return;
-  log(`📢 यात्रीगण कृपया ध्यान दें! गाड़ी संख्या ${t.number} ${t.name} प्लेटफॉर्म संख्या ${LINE_PF[line]} पर आ रही है। · Train ${t.number} is arriving on platform ${LINE_PF[line]}.`, 'ann'); chime();
+  log(`📢 यात्रीगण कृपया ध्यान दें! गाड़ी संख्या ${t.number} ${t.name} प्लेटफॉर्म संख्या ${LINE_PF[line]} पर आ रही है। · Train ${t.number} is arriving on platform ${LINE_PF[line]}.`, 'ann');
+  speakHi(`यात्रीगण कृपया ध्यान दें। गाड़ी संख्या ${hiDigits(t.number)}, ${hiName(t.name)}, प्लेटफ़ॉर्म संख्या ${HI_NUM[LINE_PF[line]]} पर आ रही है।`);
 }
 function announceDeparture(t) {
   const pf = LINE_PF[t.arrLine]; if (!pf) return;
   log(`📢 गाड़ी संख्या ${t.number} ${t.name} प्लेटफॉर्म संख्या ${pf} से रवाना होने के लिए तैयार है। · Train ${t.number} is ready to leave from platform ${pf}.`, 'ann');
+  speakHi(`यात्रीगण कृपया ध्यान दें। गाड़ी संख्या ${hiDigits(t.number)}, ${hiName(t.name)}, प्लेटफ़ॉर्म संख्या ${HI_NUM[pf]} से रवाना होने के लिए तैयार है।`);
 }
+// ---- spoken Hindi announcements (browser text-to-speech, hi-IN voice), with the station chime first ----
+const HI_NUM = ['शून्य', 'एक', 'दो', 'तीन', 'चार', 'पाँच', 'छह', 'सात', 'आठ', 'नौ'];
+const hiDigits = n => String(n).replace(/\D/g, '').split('').map(d => HI_NUM[d]).join(' ');   // train numbers are read digit by digit
+const hiName = name => name.replace(/\s*–\s*/, ' से ');                                         // "Howrah–Patna Express" -> "Howrah से Patna Express"
+let voiceOn = LS.get('sm_voice') !== 'off', hiVoice = null, voiceWarned = false;
+function pickHiVoice() {
+  if (!window.speechSynthesis) return;
+  const vs = speechSynthesis.getVoices();
+  hiVoice = vs.find(v => v.lang === 'hi-IN' && /google/i.test(v.name)) || vs.find(v => v.lang === 'hi-IN') || vs.find(v => /^hi/i.test(v.lang)) || null;
+}
+if (window.speechSynthesis) { pickHiVoice(); speechSynthesis.addEventListener?.('voiceschanged', pickHiVoice); }
+function speakHi(text) {
+  if (muted || !state.running) return;
+  if (!voiceOn || !window.speechSynthesis) { chime(); return; }          // voice off: just the chime, as before
+  if (speakHi.backlog >= 3) return;                                      // never pile up more than a few announcements
+  if (!hiVoice) pickHiVoice();
+  if (!hiVoice && !voiceWarned) { voiceWarned = true; log('🗣 No Hindi voice is installed in this browser — announcements are read with the default voice. (Chrome / Edge on Windows or Android include one.)', 'warn'); }
+  speakHi.backlog++; chime();
+  setTimeout(() => {
+    if (muted || !voiceOn) { speakHi.backlog--; return; }
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = 'hi-IN'; if (hiVoice) u.voice = hiVoice; u.rate = 0.9; u.pitch = 1; u.volume = 1;
+    u.onend = u.onerror = () => { speakHi.backlog = Math.max(0, speakHi.backlog - 1); };
+    speechSynthesis.speak(u);
+  }, 1700);
+}
+speakHi.backlog = 0;
 const CONSIST = {
   express: ['locoRed', 'SLR', 'GEN', 'GEN', 'SL', 'SL', 'SL', 'SL', 'AC', 'AC', 'GEN', 'SLR'],
   passenger: ['locoRed', 'SLR', 'GEN', 'GEN', 'GEN', 'GEN', 'GEN', 'GEN', 'SLR'],
@@ -2762,7 +2791,10 @@ $('trains').addEventListener('change', e => {
   const sel = e.target.closest('.pfsel'); if (!sel) return;
   const t = sel.closest('.tcard').trainRef; if (!trains.includes(t)) return;
   const old = t.expLine; t.expLine = +sel.value; if (old === t.expLine) return;
-  if (LINE_PF[t.expLine] && t.type !== 'goods') log(`📢 कृपया ध्यान दें! गाड़ी संख्या ${t.number} ${t.name} अब प्लेटफॉर्म संख्या ${LINE_PF[t.expLine]} पर आएगी। · Platform change: ${t.number} will now arrive on platform ${LINE_PF[t.expLine]}.`, 'ann');
+  if (LINE_PF[t.expLine] && t.type !== 'goods') {
+    log(`📢 कृपया ध्यान दें! गाड़ी संख्या ${t.number} ${t.name} अब प्लेटफॉर्म संख्या ${LINE_PF[t.expLine]} पर आएगी। · Platform change: ${t.number} will now arrive on platform ${LINE_PF[t.expLine]}.`, 'ann');
+    speakHi(`कृपया ध्यान दें। गाड़ी संख्या ${hiDigits(t.number)}, ${hiName(t.name)}, अब प्लेटफ़ॉर्म संख्या ${HI_NUM[LINE_PF[t.expLine]]} पर आएगी।`);
+  }
   else log(`${t.number} now booked for ${lineName(t.expLine)}.`);
   beep(660);
 });
@@ -3044,7 +3076,10 @@ document.querySelectorAll('#speedBtns .btn').forEach(b => b.addEventListener('cl
 document.querySelectorAll('#todBtns .btn').forEach(b => b.addEventListener('click', () => setTOD(b.dataset.tod)));
 $('qBtn').textContent = HQ ? 'Graphics: High' : 'Graphics: Low';
 $('qBtn').addEventListener('click', () => { LS.set('smq', HQ ? 'low' : 'high'); location.reload(); });
-$('muteBtn').addEventListener('click', () => { muted = !muted; $('muteBtn').textContent = muted ? '🔇' : '🔊'; });
+$('muteBtn').addEventListener('click', () => { muted = !muted; $('muteBtn').textContent = muted ? '🔇' : '🔊'; if (muted && window.speechSynthesis) { speechSynthesis.cancel(); speakHi.backlog = 0; } });
+const showVoice = () => { $('voiceBtn').classList.toggle('on', voiceOn); $('voiceBtn').textContent = voiceOn ? '🗣 हिंदी' : '🗣 off'; };
+showVoice();
+$('voiceBtn').addEventListener('click', () => { voiceOn = !voiceOn; LS.set('sm_voice', voiceOn ? 'on' : 'off'); showVoice(); if (!voiceOn && window.speechSynthesis) { speechSynthesis.cancel(); speakHi.backlog = 0; } });
 
 // --- settings ---
 function openSettings() {
