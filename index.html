@@ -2928,21 +2928,16 @@ function drawPanel() {
   // signals
   for (const s of signals) {
     const [x, y] = sigPos(s); if (x < -10 || x > PW + 10) continue;
-    // ON = a "D" (flat back, round face towards the train) glowing red; OFF = a solid arrow pointing the way, green (yellow = caution)
+    // a simple glowing dot: red = ON, yellow = caution, green = OFF (shunt signals: white = OFF); no name on the map
     const col = s.kind === 'shunt' ? (s.aspect ? '#ffffff' : '#ff2a1a') : ['#ff2a1a', '#ffd21a', '#38e05c'][s.aspect];
-    const r = s.kind === 'shunt' ? 3 : s.kind === 'home' ? 4.6 : 4, d = s.dir;
-    g.shadowColor = col; g.shadowBlur = 6; g.lineWidth = 1.6;
-    if (!s.aspect) {
-      g.fillStyle = 'rgba(5,12,26,0.95)'; g.strokeStyle = '#ffffff';
-      g.beginPath(); g.moveTo(x + d * r * 0.2, y - r); g.arc(x + d * r * 0.2, y, r, -Math.PI / 2, Math.PI / 2, d < 0); g.closePath(); g.fill(); g.stroke();
-      g.strokeStyle = col; g.lineWidth = 1; g.stroke();
-    } else {
-      g.fillStyle = col; g.beginPath(); g.moveTo(x + d * r * 1.2, y); g.lineTo(x - d * r * 0.8, y - r); g.lineTo(x - d * r * 0.8, y + r); g.closePath(); g.fill();
+    g.fillStyle = col; g.shadowColor = col; g.shadowBlur = 6;
+    g.beginPath(); g.arc(x, y, s.kind === 'shunt' ? 2.4 : 3.2, 0, Math.PI * 2); g.fill(); g.shadowBlur = 0;
+    if (hover && hover.sig === s) {   // name only while the pointer is on it
+      g.strokeStyle = '#fff'; g.lineWidth = 1.5; g.beginPath(); g.arc(x, y, 6.5, 0, Math.PI * 2); g.stroke();
+      const t = s.id + (s.kind === 'home' && s.routeLine ? ` → ${lineShort(s.routeLine)}` : '') + (s.cleared ? ' · OFF' : ' · ON');
+      g.font = '600 10px Segoe UI'; g.textAlign = 'left'; const w = g.measureText(t).width + 8;
+      g.fillStyle = 'rgba(5,12,26,0.92)'; g.fillRect(x + 9, y - 8, w, 14); g.fillStyle = col; g.fillText(t, x + 13, y + 3);
     }
-    g.shadowBlur = 0;
-    if (hover && hover.sig === s) { g.strokeStyle = '#fff'; g.lineWidth = 1.5; g.beginPath(); g.arc(x, y, 7, 0, Math.PI * 2); g.stroke(); }
-    g.fillStyle = 'rgba(200,225,240,0.75)'; g.font = '600 7.5px Segoe UI'; g.textAlign = s.dir > 0 ? 'right' : 'left';
-    g.fillText(s.id + (s.kind === 'home' && s.routeLine ? `→${s.routeLine}` : ''), x + (s.dir > 0 ? -7 : 7), y + 3);
   }
 }
 function panelHit(e) {
