@@ -29,11 +29,21 @@ html,body{margin:0;height:100%;overflow:hidden;background:#000;font-family:'Sego
 .card h3{margin:0;padding:10px 12px 6px;font-size:11px;letter-spacing:1.2px;text-transform:uppercase;color:var(--mut);font-weight:600}
 #trains{padding:0 8px 8px;display:flex;flex-direction:column;gap:6px;max-height:44vh;overflow:auto}
 .empty{color:var(--mut);font-size:12px;padding:4px 6px 8px}
-.tcard{padding:8px 10px;border-radius:8px;background:rgba(255,255,255,0.045);border:1px solid transparent;cursor:pointer}
+.tcard{padding:6px 8px;border-radius:8px;background:rgba(255,255,255,0.045);border:1px solid transparent;cursor:pointer;margin-bottom:5px}
 .tcard:hover{background:rgba(255,255,255,0.08)}
 .tcard.sel{border:2px solid var(--acc);background:rgba(255,179,0,0.16);box-shadow:0 0 0 3px rgba(255,179,0,0.25),0 0 18px rgba(255,179,0,0.45);animation:selpulse 1.6s ease-in-out infinite}
-.tcard.sel .tnum .no{background:var(--acc);color:#111;padding:0 6px;border-radius:4px}
-.tcard.sel .tnum::before{content:'▶ SELECTED ';color:var(--acc);font-weight:700;font-size:11px}
+.tcard.sel .trow1 .no{background:var(--acc);color:#111;padding:0 5px;border-radius:4px}
+/* compact card: row 1 name/time/delay · row 2 controls · row 3 route · ▼ details */
+.trow1{display:flex;align-items:center;gap:6px;font-size:12.5px;min-width:0}
+.trow1 .no{font-weight:700;white-space:nowrap}
+.trow1 .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--mut);font-size:12px}
+.trow1 .tm{font-variant-numeric:tabular-nums;color:#d6e2e8;font-size:11.5px;white-space:nowrap}
+.dly{font-size:10.5px;padding:1px 5px;border-radius:4px;font-weight:600;white-space:nowrap}
+.dly.late{background:rgba(255,138,101,0.18);color:#ff9a7a}.dly.ok{background:rgba(129,228,138,0.16);color:#8fe89a}.dly:empty{display:none}
+.sdot{width:8px;height:8px;border-radius:50%;flex:0 0 8px;background:#ffd54f}.sdot.warn{background:#ff8a65}.sdot.ok{background:#81e48a}
+.more{background:none;border:0;color:#b8c7cf;cursor:pointer;font-size:12px;padding:0 3px;line-height:1;transition:transform .15s}
+.more:hover{color:#fff}.tcard.open .more{transform:rotate(180deg)}
+.tmore{display:none;margin-top:5px;border-top:1px dashed rgba(255,255,255,0.1);padding-top:4px}.tcard.open .tmore{display:block}
 @keyframes selpulse{50%{box-shadow:0 0 0 3px rgba(255,179,0,0.45),0 0 26px rgba(255,179,0,0.7)}}
 .tnum{font-weight:700;font-size:13px}
 .tnum span{font-weight:400;color:var(--mut);margin-left:6px;font-size:12px}
@@ -77,9 +87,9 @@ html,body{margin:0;height:100%;overflow:hidden;background:#000;font-family:'Sego
 #trains{max-height:none;flex:1;overflow:auto;padding:6px 8px;min-height:0}
 .btn.sm{font-size:11px;padding:3px 7px;background:rgba(255,255,255,0.08)}
 .btn.sigb.off{background:#1f6b35}
-.tctl{display:flex;gap:4px;margin-top:6px;flex-wrap:wrap}
+.tctl{display:flex;gap:4px;margin-top:5px;flex-wrap:wrap;align-items:center}
 .tdest{font-size:11px;color:#9fd0b5;margin-top:2px}
-.tpts{display:flex;gap:4px;flex-wrap:wrap;margin-top:5px;align-items:center}
+.tpts{display:flex;gap:4px;flex-wrap:wrap;margin-top:4px;align-items:center}.tpts:empty{display:none}
 .tpts .lbl{font-size:10px;color:var(--mut)}
 .chip{font:inherit;font-size:10.5px;padding:2px 6px;border-radius:5px;border:1px solid rgba(200,210,215,0.35);background:rgba(255,255,255,0.06);color:#d6dee2;cursor:pointer}
 .chip.r{border-color:rgba(53,226,124,0.8);background:rgba(53,226,124,0.2);color:#9ff5c2}
@@ -95,7 +105,7 @@ html,body{margin:0;height:100%;overflow:hidden;background:#000;font-family:'Sego
 #log .ann{color:#8fd3ff}
 .tsched{font-size:11px;margin-top:3px;color:#d6e2e8}.tsched b{color:#fff}
 .late{color:#ff8a65;font-weight:600}.ontime{color:#81e48a;font-weight:600}
-.pfl{font-size:11px;color:var(--mut);margin-top:5px;display:flex;gap:6px;align-items:center}
+.pfl{display:inline-flex;align-items:center;margin-left:auto}
 .pfsel{font:inherit;font-size:11px;background:#1b232b;color:#fff;border:1px solid rgba(255,255,255,0.25);border-radius:5px;padding:2px 4px}
 .pfsel:disabled{opacity:.6}
 </style>
@@ -2329,14 +2339,13 @@ function cardFor(t) {
   let el = cards.get(t);
   if (el) return el;
   el = document.createElement('div'); el.className = 'tcard'; el.trainRef = t;
-  el.innerHTML = `<div class="tnum"><span class="no"></span><span class="nm"></span></div>
-    <div class="tinfo"></div><div class="tstat"></div><div class="tsched"></div><div class="tdest"></div>
-    <label class="pfl" data-act="none">Expected platform / line <select class="pfsel" data-act="none"></select></label>
-    <div class="tctl"><button class="btn sm" data-act="view">🎥 View</button><button class="btn sm" data-act="cab">🚆 Cab</button><button class="btn sm sigb" data-act="sig"></button><button class="btn sm" data-act="stop" title="Order the driver to stop / go on">⏹ Stop</button><button class="btn sm" data-act="rev" title="Change ends and shunt back (set the points first) — e.g. back into a yard">⇄ Reverse</button><button class="btn sm" data-act="cpl" title="Couple to the standing rake just ahead">🔗 Couple</button><button class="btn sm" data-act="ucpl" title="Uncouple the engine — the rake stays standing here">✂ Uncouple</button></div>
-    <div class="tpts"></div>`;
+  el.innerHTML = `<div class="trow1"><span class="sdot"></span><span class="no"></span><span class="nm"></span><span class="tm"></span><span class="dly"></span><button class="more" data-act="more" title="More details">▼</button></div>
+    <div class="tctl"><button class="btn sm" data-act="view" title="Follow this train">🎥 View</button><button class="btn sm" data-act="cab" title="Ride in the loco cab">🚆</button><button class="btn sm sigb" data-act="sig"></button><button class="btn sm" data-act="stop" title="Order the driver to stop / go on">⏹ Stop</button><button class="btn sm" data-act="rev" title="Reverse: change ends and shunt back (set the points first) — e.g. back into a yard">⇄</button><button class="btn sm" data-act="cpl" title="Couple to the standing rake just ahead">🔗 Couple</button><button class="btn sm" data-act="ucpl" title="Uncouple the engine — the rake stays standing here">✂ Uncouple</button><span class="pfl" data-act="none" title="Expected platform / line"><select class="pfsel" data-act="none"></select></span></div>
+    <div class="tpts"></div>
+    <div class="tmore"><div class="tinfo"></div><div class="tstat"></div><div class="tsched"></div><div class="tdest"></div></div>`;
   const sel = el.querySelector('.pfsel');
   if (t.stabled) el.querySelector('.pfl').style.display = 'none';
-  else sel.innerHTML = (t.type === 'goods' ? [1, 7, 8, 13, 9, 10, 11, 12] : [2, 3, 4, 5, 6]).map(n => `<option value="${n}">${LINE_PF[n] ? 'Platform ' + LINE_PF[n] : lineName(n)}</option>`).join('');
+  else sel.innerHTML = (t.type === 'goods' ? [1, 7, 8, 13, 9, 10, 11, 12] : [2, 3, 4, 5, 6]).map(n => `<option value="${n}">${LINE_PF[n] ? 'PF ' + LINE_PF[n] : lineName(n)}</option>`).join('');
   cards.set(t, el); return el;
 }
 function nextSignalOf(t) {
@@ -2363,6 +2372,16 @@ function renderTrainList() {
     el.classList.toggle('sel', t === selected);
     el.querySelector('.no').textContent = t.number;
     el.querySelector('.nm').textContent = t.name;
+    const dot = el.querySelector('.sdot'); dot.className = 'sdot ' + (t.stabled ? '' : t.statusCls); dot.title = t.status;
+    { // row 1: the one time that matters + delay badge
+      const tm = el.querySelector('.tm'), dl = el.querySelector('.dly');
+      let txt = '', late = null;
+      if (t.job === 'originate' && t.schedDep) { txt = (t.p > STARTER_U ? 'Dep ' : 'Dep ') + fmtClock(t.schedDep); if (t.p <= STARTER_U) late = Math.round((state.time + (t.halted && !t.dwellDone ? t.dwell : 0) - t.schedDep) / 60); }
+      else if (t.schedArr) { txt = (t.actArr != null ? 'Arr ' : 'Exp ') + fmtClock(t.eta); late = Math.round((t.eta - t.schedArr) / 60); }
+      else if (!t.stabled) txt = `${Math.round(t.v * 3.6)} km/h`;
+      tm.textContent = txt;
+      dl.textContent = late == null ? '' : late > 0 ? `+${late} min` : 'On time'; dl.className = 'dly ' + (late > 0 ? 'late' : 'ok');
+    }
     const zNow = Math.round(t.zOf(t.front)), lnS = Z_LINE[zNow];
     el.querySelector('.tinfo').textContent = t.stabled ? `${t.cars.length} vehicles · standing on ${lnS && Math.abs(t.front) < 1700 ? lineName(lnS) + (lnS > 8 ? ` (${t.front > 0 ? 'East' : 'West'} yard)` : '') : 'track ' + (CORR.find(c => c.z === zNow)?.k ?? '')} · ${(Math.abs(t.front) / 1000).toFixed(2)} km ${t.front < 0 ? 'west' : 'east'} · couple an engine to move it` :
       t.isEngine ? `${t.cfg.label} · ${t.dir > 0 ? 'facing East' : 'facing West'} · ${Math.round(t.v * 3.6)} km/h · ${t.front > 0 ? 'East' : 'West'} side` :
@@ -2392,7 +2411,7 @@ function renderTrainList() {
     rvb.disabled = !t.canReverse(); rvb.style.opacity = rvb.disabled ? 0.45 : 1;
     const cpb = el.querySelector('[data-act="cpl"]'), ucb = el.querySelector('[data-act="ucpl"]');
     cpb.style.display = !t.stabled && t.locoObj && t.couplable() ? '' : 'none';
-    ucb.style.display = !t.stabled && t.locoObj && t.cars.length > 1 ? '' : 'none';
+    ucb.style.display = !t.stabled && t.canUncouple() ? '' : 'none';
     ucb.disabled = !t.canUncouple(); ucb.style.opacity = ucb.disabled ? 0.45 : 1;
     el.querySelector('.pfl').style.display = t.stabled || t.isEngine || t.exYard ? 'none' : '';
     // facing points ahead: set the route right from here
@@ -2401,7 +2420,7 @@ function renderTrainList() {
     const pts = el.querySelector('.tpts');
     if (pts.dataset.sig !== sig) {
       pts.dataset.sig = sig;
-      pts.innerHTML = facing.length ? '<span class="lbl">Points ahead:</span>' + facing.map(f => `<button class="chip ${POINTS[f.c.id] === 'R' ? 'r' : ''}" data-act="pt" data-pt="${f.c.id}">${f.c.id} ${POINTS[f.c.id]}</button>`).join('') : '';
+      pts.innerHTML = facing.length ? '<span class="lbl">Route:</span>' + facing.map(f => `<button class="chip ${POINTS[f.c.id] === 'R' ? 'r' : ''}" data-act="pt" data-pt="${f.c.id}">${f.c.id} ${POINTS[f.c.id]}</button>`).join('') : '';
     }
   });
 }
@@ -2411,6 +2430,7 @@ $('trains').addEventListener('click', e => {
   const btn = e.target.closest('[data-act]');
   const act = btn ? btn.dataset.act : 'view';
   if (act === 'none') return;
+  if (act === 'more') { card.classList.toggle('open'); return; }
   if (act === 'pt') { togglePoint(btn.dataset.pt); renderTrainList(); return; }
   if (act === 'sig') { const s = signals.find(s => s.id === btn.dataset.sig); if (s) clickSignal(s); renderTrainList(); return; }
   if (act === 'stop') {
