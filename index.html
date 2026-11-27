@@ -181,7 +181,7 @@ html,body{margin:0;height:100%;overflow:hidden;background:#000;font-family:'Sego
 </div>
 
 <div id="panelwrap" class="hud win hidden">
-  <div class="winhead"><b>Panel</b><span class="hint">click A–D at the edges = arrivals / departures only · click a train = select · click signal = ON/OFF · click a crossover = throw point (green = set) · wheel = zoom · drag = pan · drag corner = resize · H = hide</span><button class="btn sm" id="pzOut" title="Zoom out">−</button><button class="btn sm" id="pzIn" title="Zoom in">+</button><button class="btn sm" id="pzStation">Station</button><button class="btn sm" id="pzFit">Fit all</button><input type="range" class="opac" min="10" max="95" value="45" title="Transparency"></div>
+  <div class="winhead"><b>Panel</b><span class="hint">click A–D at the edges = main line beyond the Outer: arrivals / departures only · click a train = select · click signal = ON/OFF · click a crossover = throw point (green = set) · wheel = zoom · drag = pan · drag corner = resize · H = hide</span><button class="btn sm" id="pzOut" title="Zoom out">−</button><button class="btn sm" id="pzIn" title="Zoom in">+</button><button class="btn sm" id="pzStation">Station</button><button class="btn sm" id="pzFit">Fit all</button><input type="range" class="opac" min="10" max="95" value="45" title="Transparency"></div>
   <canvas id="panel"></canvas>
 </div>
 
@@ -2252,12 +2252,12 @@ class Train {
 // Locked points cannot be thrown. Once the train passes the signal, the route stays locked behind it and is
 // released section by section as the train's tail clears it.
 const routes = [];
-// main-track use, set separately for each side of the station: 'both', 'arr' (towards the station only) or 'dep' (away only)
+// main-track use OUTSIDE the station (beyond the Outer signals), set for each side: 'both', 'arr' (trains coming in only)
+// or 'dep' (trains going out only). Inside station limits trains may use any track in either direction.
 const TRACK_MODE = Object.fromEntries(CORR.map(c => [c.k, { W: 'both', E: 'both' }]));
 function routeAgainstMode(r) {
   for (const [x, z] of r.cells) {
-    if (Math.abs(x) < 540) continue;
-    const c = CORR.find(c => Math.abs(c.z - z) < 0.3); if (!c) continue;
+    const c = CORR.find(c => Math.abs(c.z - z) < 0.3); if (!c || Math.abs(x) <= c.home) continue;   // only beyond the Outer signal
     const side = x < 0 ? 'W' : 'E', m = TRACK_MODE[c.k][side]; if (m === 'both') continue;
     const toward = (side === 'W' ? 1 : -1) === r.dir;
     if ((m === 'arr' && !toward) || (m === 'dep' && toward)) return `track ${c.k} ${side === 'W' ? 'west' : 'east'} is set for ${m === 'arr' ? 'arrivals' : 'departures'} only`;
@@ -2807,7 +2807,7 @@ function drawPanel() {
     g.fillText(c.k + ' ' + (dirE == null ? '⇄' : dirE ? '→' : '←'), x0 + w / 2, y + 3.5);
     if (dirE != null) {                                                            // chevrons along that side's section
       g.strokeStyle = col; g.lineWidth = 1.5;
-      for (let u = 700; u < TRACK_HALF - 100; u += 260) {
+      for (let u = CORR[0].home + 120; u < TRACK_HALF - 60; u += 200) {   // beyond the Outer signals only
         const X = PX((side === 'W' ? -1 : 1) * u), s = dirE ? 1 : -1; if (X < 36 || X > PW - 36) continue;
         g.beginPath(); g.moveTo(X - s * 3, y - 3); g.lineTo(X + s * 2, y); g.lineTo(X - s * 3, y + 3); g.stroke();
       }
