@@ -1686,8 +1686,16 @@ function buildSignal(sig) {
   scene.add(grp);
   sig.lamps = lamps; sig.sprite = spr; sig.lampY = lampY;
 }
-for (const c of CORR) for (const dir of [1, -1])
-  signals.push({ id: `H${c.k}${dir > 0 ? 'E' : 'W'}`, kind: 'home', dir, track: c.z, x: -dir * c.home, z: c.z - dir * 2.3, cleared: false, aspect: 0, routeLine: null });
+// Indian Railways sequence on every main track, each direction: Outer (1.8 km) → Home (1.05 km, between the two
+// crossover ladders) → Starter (end of platform) → Advanced Starter (1.05 km out). A route only locks as far as
+// the next signal, so the sections are short and more trains can move at the same time.
+const INNER_U = 1050;
+for (const c of CORR) for (const dir of [1, -1]) {
+  const e = dir > 0 ? 'E' : 'W';
+  signals.push({ id: `O${c.k}${e}`, kind: 'home', outer: true, dir, track: c.z, x: -dir * c.home, z: c.z - dir * 2.3, cleared: false, aspect: 0, routeLine: null });
+  signals.push({ id: `H${c.k}${e}`, kind: 'home', dir, track: c.z, x: -dir * INNER_U, z: c.z - dir * 2.3, cleared: false, aspect: 0, routeLine: null });
+  signals.push({ id: `AS${c.k}${e}`, kind: 'adv', dir, track: c.z, x: dir * INNER_U, z: c.z - dir * 2.3, cleared: false, aspect: 0 });
+}
 for (let n = 1; n <= 8; n++) for (const dir of [1, -1])
   signals.push({ id: `S${n}${dir > 0 ? 'E' : 'W'}`, kind: 'starter', line: n, dir, track: LINE_Z[n], x: dir * STARTER_U, z: LINE_Z[n] - dir * 2.3, cleared: false, aspect: 0 });
 signals.forEach(buildSignal);
@@ -1698,10 +1706,23 @@ function homeLeadsTo(s) {
   if (legs.some(L => L.dead && L.p1 < 0)) return null;
   return Z_LINE[Math.round(legZ(legs, 0))] ?? null;
 }
+// the next signal a train will meet after passing s, following the points as they lie
+function nextSignalAhead(s) {
+  const d = s.dir, p0 = s.x * d, { legs } = predictFrom(s.track, p0, d, 3700);
+  let best = null, bp = Infinity;
+  for (const o of signals) {
+    if (o === s || o.dir !== d) continue;
+    const op = o.x * d; if (op <= p0 + 5 || op >= bp || legs.some(L => L.dead && op > L.p1)) continue;
+    if (Math.abs(legZ(legs, op) - o.track) < 0.8) { best = o; bp = op; }
+  }
+  return best;
+}
 function refreshAspects() {
   for (const s of signals) {
     if (s.kind === 'home') s.routeLine = homeLeadsTo(s);
-    s.aspect = !s.cleared ? 0 : s.kind === 'starter' ? 2 : (s.routeLine && starterFor(s.routeLine, s.dir)?.cleared ? 2 : 1);
+    // green if the next signal is also OFF (or there is none in the station area), yellow if it is ON
+    const nx = s.cleared ? nextSignalAhead(s) : null;
+    s.aspect = !s.cleared ? 0 : !nx || nx.cleared ? 2 : 1;
     s.lamps.forEach((l, i) => l.material.emissiveIntensity = (i === s.aspect ? 5 : 0));
     s.sprite.material.color.setHex(ASPECT_COL[s.aspect]);
     s.sprite.position.set(-0.32, s.lampY[s.aspect], 0);
@@ -2082,7 +2103,9 @@ class Train {
         this.passed.add(s);
         if (s.aspect === 0) { state.score -= 150; log(`SPAD! ${this.number} passed ${s.id} at danger. −150`, 'bad'); toast(`SPAD — ${this.number} passed ${s.id} at danger!`); }
         if (s.kind === 'starter') log(`${this.number} ${this.name} departed from Line ${s.line}`, 'good');
-        else { log(`${this.number} passed ${s.id} — heading for ${s.routeLine ? lineName(s.routeLine) : '?'}`); if (s.routeLine) announceArrival(this, s.routeLine); }
+        else if (s.kind === 'adv') log(`${this.number} passed advanced starter ${s.id} — out into the block section`);
+        else if (s.outer) log(`${this.number} passed outer ${s.id}${s.routeLine ? ` — set for ${lineName(s.routeLine)}` : ''}`);
+        else { log(`${this.number} passed home ${s.id} — heading for ${s.routeLine ? lineName(s.routeLine) : '?'}`); if (s.routeLine) announceArrival(this, s.routeLine); }
         routeEntered(s, this); s.cleared = false; refreshAspects();
       }
     }
@@ -2150,7 +2173,7 @@ class Train {
 // released section by section as the train's tail clears it.
 const routes = [];
 function buildRoute(s) {
-  const cap = s.kind === 'home' ? 3600 : 1600;                // a home route runs to the far starter; a starter route ~1.6 km out
+  const cap = s.kind === 'home' ? 3600 : 1600;                // routes end at the next signal ahead; otherwise ~1.6 km out
   const d = s.dir, p0 = s.x * d, { legs } = predictFrom(s.track, p0, d, cap + 100);
   let p1 = p0 + cap;
   const dead = legs.find(L => L.dead); if (dead) p1 = Math.min(p1, dead.p1);
@@ -2163,7 +2186,7 @@ function buildRoute(s) {
   refreshRoute(r); return r;
 }
 function refreshRoute(r) {
-  r.cells = []; for (let p = r.p0; p <= r.p1; p += 4) r.cells.push([p * r.dir, legZ(r.legs, p)]);
+  r.cells = []; for (let p = r.p0 + 4; p <= r.p1 - 4; p += 4) r.cells.push([p * r.dir, legZ(r.legs, p)]);   // routes meeting at a signal do not clash
   r.pts = new Set();
   for (const c of XOVERS) for (const [x, z] of [[c.x1, c.z1], [c.x2, c.z2]]) {
     const p = x * r.dir; if (p < r.p0 - 1 || p > r.p1 + 1) continue;
@@ -2269,7 +2292,7 @@ function trySpawn() {
     const t = new Train(type, dir, c.z, startU); trains.push(t); state.first = false;
     t.schedArr = Math.round((state.time + (startU + 150) / (t.cfg.vmax * 0.7) + 90 - (Math.floor(Math.random() * 9) - 2) * 60) / 60) * 60;
     if (!selected) selected = t;
-    log(`Section Controller: line clear given for ${t.number} ${t.name} (${t.cfg.label}) from the ${dir > 0 ? 'West' : 'East'} on track ${c.k} — ${JOB_LABEL[t.job]}. Home H${c.k}${dir > 0 ? 'E' : 'W'}.`, 'warn');
+    log(`Section Controller: line clear given for ${t.number} ${t.name} (${t.cfg.label}) from the ${dir > 0 ? 'West' : 'East'} on track ${c.k} — ${JOB_LABEL[t.job]}. Outer O${c.k}${dir > 0 ? 'E' : 'W'}, home H${c.k}${dir > 0 ? 'E' : 'W'}.`, 'warn');
     return true;
   }
   return false;
