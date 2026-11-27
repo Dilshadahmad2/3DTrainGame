@@ -2337,24 +2337,26 @@ function routeGoal(t) {
   if (arriving) {
     const T = t.expLine;
     if (!T) return null;
-    if (YARD_LINES.includes(T)) return { arriving, name: lineName(T), stopAt: legs => { const hp = YARD_HALT; return hp > t.p && Z_LINE[Math.round(legZ(legs, hp))] === T && !deadBefore(legs, hp) ? hp : null; } };
-    return { arriving, name: LINE_PF[T] ? 'PF ' + LINE_PF[T] : lineName(T), stopAt: legs => Z_LINE[Math.round(legZ(legs, 0))] === T && !deadBefore(legs, 0) ? HALT_U : null };
+    if (YARD_LINES.includes(T)) return { arriving, limit: YARD_HALT, name: lineName(T), stopAt: legs => { const hp = YARD_HALT; return hp > t.p && Z_LINE[Math.round(legZ(legs, hp))] === T && !deadBefore(legs, hp) ? hp : null; } };
+    return { arriving, limit: HALT_U, name: LINE_PF[T] ? 'PF ' + LINE_PF[T] : lineName(T), stopAt: legs => Z_LINE[Math.round(legZ(legs, 0))] === T && !deadBefore(legs, 0) ? HALT_U : null };
   }
   const p = t.p + 2000, side = p * t.dir < 0 ? 'W' : 'E';
   return { arriving, name: 'main line', stopAt: legs => { if (deadBefore(legs, p)) return null; const c = CORR.find(c => Math.abs(legZ(legs, p) - c.z) < 0.3); return c && TRACK_MODE[c.k][side] !== 'arr' ? t.p + 2600 : null; } };
 }
 // fewest point changes that make the train's path reach the goal (breadth-first over the facing points ahead)
 function findPointSet(t, goal) {
-  const orig = { ...POINTS }, queue = [[]], seen = new Set(['']); let found = null, n = 0;
+  // points are decided in order along the path (only ones beyond the last flip are tried next), so each node is one
+  // distinct path and the search stays small even when a route needs many flips (e.g. deep into the yard)
+  const orig = { ...POINTS }, queue = [{ flips: [], lastP: -Infinity }]; let found = null, n = 0;
   while (queue.length && n++ < 3000) {
-    const flips = queue.shift();
+    const { flips, lastP } = queue.shift();
     Object.assign(POINTS, orig); for (const id of flips) POINTS[id] = POINTS[id] === 'N' ? 'R' : 'N';
     const pr = trainPath(t), stop = goal.stopAt(pr.legs);
     if (stop != null) { found = { flips, stop, legs: pr.legs }; break; }
-    if (flips.length >= 6) continue;
+    if (flips.length >= 8) continue;
     for (const f of pr.facing) {
-      const id = f.c.id; if (flips.includes(id) || f.c.fixed || lockedBy(id)) continue;
-      const nf = [...flips, id].sort(), key = nf.join(','); if (!seen.has(key)) { seen.add(key); queue.push(nf); }
+      const id = f.c.id; if (f.p <= lastP || f.p > (goal.limit ?? Infinity) || flips.includes(id) || f.c.fixed || lockedBy(id)) continue;
+      queue.push({ flips: [...flips, id], lastP: f.p });
     }
   }
   if (found) {   // trailing points on the path must lie for it, or the train would run through them
