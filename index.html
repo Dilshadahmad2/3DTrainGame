@@ -580,9 +580,12 @@ const pfLights = []; // kept empty: lamp glow sprites are used instead of real l
 //  Trains simply follow the points as they are set.
 // =====================================================================
 // Station (south -> north): Line 1 loop · Line 2 PF1 · Line 3 PF2 · Line 4 PF3 · Line 5 PF4 · Line 6 PF5 · Line 7 loop · Line 8 loop
-// Yard (east, on the PF1 side): Yard 1, 2, 3 + Goods line, through to corridor track A at its far end (point 308).
-// A separate goods RUNNING LINE (Line 13) comes from the far west (point 309), runs past the station on the yard side
-// (behind the station building), and leads into the yard; more links: 310/311 west of the station, 301 at the east throat.
+// The 4 main tracks A–D come in from BOTH directions into the CENTRE of the station: they run straight through
+// as Lines 3, 4, 5, 6 (PF2–PF5). Lines 1, 2 (south) and 7, 8 (north) fan off them in the throats, and two dense
+// crossover ladders on each side let a train on any main track reach any line, in either direction.
+// Yard (east, PF1 side): Yard 1, 2, 3 + Goods line, through to main track A at its far end (308).
+// Goods RUNNING LINE (Line 13): from main track A far west (309) past the station on the yard side, round behind the
+// station building, into the yard; more links 310/311 (west), 301/401 (Line 1 at both station ends), 312/402.
 const RUN_LINE = 13;
 const LINE_Z = { 1: 0, 2: 5, 3: 15, 4: 20, 5: 30, 6: 35, 7: 45, 8: 50, 9: -14, 10: -20, 11: -26, 12: -32, 13: -12 };
 const Z_LINE = Object.fromEntries(Object.entries(LINE_Z).map(([n, z]) => [z, +n]));
@@ -591,28 +594,28 @@ const GOODS_LINE = 12, YARD_LINES = [9, 10, 11, 12];
 const lineName = n => n <= 8 ? `Line ${n}` : n === RUN_LINE ? 'Running line' : n === GOODS_LINE ? 'Goods line' : `Yard ${n - 8}`;
 const lineKind = n => LINE_PF[n] ? `PF ${LINE_PF[n]}` : n === RUN_LINE ? 'goods running line' : n === GOODS_LINE ? 'goods shed' : n > 8 ? 'yard' : 'loop';
 const LINE_PF = { 2: 1, 3: 2, 4: 3, 5: 4, 6: 5 };            // line -> platform number (others are loops)
-const CORR = [{ k: 'A', z: 0, home: 1750 }, { k: 'B', z: 5, home: 1250 }, { k: 'C', z: 10, home: 1650 }, { k: 'D', z: 15, home: 1100 }, { k: 'E', z: 20, home: 1850 }];
+const CORR = [{ k: 'A', z: 15, home: 1800 }, { k: 'B', z: 20, home: 1800 }, { k: 'C', z: 30, home: 1800 }, { k: 'D', z: 35, home: 1800 }];
 const STARTER_U = 172, HALT_U = 158, END_U = TRACK_HALF;
 const sCurve = (u, u0, u1, za, zb) => { const t = Math.min(1, Math.max(0, (u - u0) / (u1 - u0))); return za + (zb - za) * (1 - Math.cos(Math.PI * t)) / 2; };
 const SEGS = [
-  { z: 0, x0: -END_U, x1: END_U }, { z: 5, x0: -END_U, x1: END_U }, { z: 15, x0: -END_U, x1: END_U }, { z: 20, x0: -END_U, x1: END_U },
-  { z: 10, x0: -END_U, x1: -490 }, { z: 10, x0: 490, x1: END_U },
-  { z: 30, x0: -740, x1: 740 }, { z: 35, x0: -640, x1: 640 }, { z: 45, x0: -520, x1: 520 }, { z: 50, x0: -440, x1: 440 },
+  { z: 15, x0: -END_U, x1: END_U }, { z: 20, x0: -END_U, x1: END_U }, { z: 30, x0: -END_U, x1: END_U }, { z: 35, x0: -END_U, x1: END_U },
+  { z: 0, x0: -320, x1: 320 }, { z: 5, x0: -430, x1: 430 }, { z: 45, x0: -430, x1: 430 }, { z: 50, x0: -320, x1: 320 },
 ];
 for (const [z, a, b] of [[-14, 680, 1540], [-20, 780, 1460], [-26, 860, 1380], [-32, 940, 1300]]) SEGS.push({ z, x0: a, x1: b });
 // running line: west of the station, behind the station building, and east of the station up to the yard
-SEGS.push({ z: -12, x0: -1620, x1: -430 }, { z: -70, x0: -270, x1: 270 }, { z: -12, x0: 430, x1: 620 });
+SEGS.push({ z: -12, x0: -1580, x1: -310 }, { z: -70, x0: -270, x1: 270 }, { z: -12, x0: 310, x1: 620 });
 const XOVERS = [], POINTS = {};
 {
-  // [z inner, u inner, z outer, u outer]
-  const throat = [[0, 200, 5, 260], [5, 290, 0, 350], [5, 370, 15, 470], [15, 230, 5, 330], [15, 200, 20, 260], [20, 290, 15, 350],
-    [5, 430, 10, 490], [15, 520, 10, 580],
-    [50, 440, 45, 500], [45, 520, 35, 620], [35, 640, 30, 700], [30, 740, 20, 840]];
-  const ladder = [], pairs = [[0, 5], [5, 10], [10, 15], [15, 20]];
-  for (let k = 0; k < 7; k++) pairs.forEach(([a, b], p) => { const u0 = 650 + 300 * k + 75 * p; ladder.push((k + p) % 2 === 0 ? [a, u0, b, u0 + 60] : [b, u0, a, u0 + 60]); });
+  // [z inner, u inner, z outer, u outer] — a train heading AWAY from the station takes it from z inner to z outer,
+  // one heading TOWARDS the station from z outer to z inner. Built for both ends (west ids 1xx, east ids 2xx).
+  const fan = [[0, 320, 5, 390], [5, 430, 15, 510], [50, 320, 45, 390], [45, 430, 35, 510]];   // outer lines join the main tracks
+  const ladder1 = [[15, 550, 20, 610], [35, 550, 30, 610], [20, 640, 30, 720], [30, 650, 35, 710],
+    [20, 750, 15, 810], [30, 830, 20, 910], [30, 940, 35, 1000], [20, 940, 15, 1000]];
+  const ladder2 = [[15, 1100, 20, 1160], [20, 1190, 30, 1270], [30, 1300, 35, 1360],
+    [20, 1420, 15, 1480], [30, 1440, 20, 1520], [35, 1450, 30, 1510]];
   for (const [side, base] of [[-1, 100], [1, 200]]) {
     let n = base;
-    for (const [zi, ui, zo, uo] of [...throat, ...ladder]) {
+    for (const [zi, ui, zo, uo] of [...fan, ...ladder1, ...ladder2]) {
       n++;
       const pA = { x: side * ui, z: zi }, pB = { x: side * uo, z: zo };
       const [P1, P2] = pA.x < pB.x ? [pA, pB] : [pB, pA];
@@ -621,29 +624,24 @@ const XOVERS = [], POINTS = {};
     }
   }
 }
-// extra throat crossover (141 west / 241 east): Line 2 / track B -> Line 1 just before the yard point,
-// so trains from Lines 2 and 3 can also reach Line 1 and the yard after the platforms
-for (const side of [-1, 1]) {
-  const c = { id: side > 0 ? '241' : '141', x1: side > 0 ? 395 : -455, z1: side > 0 ? 5 : 0, x2: side > 0 ? 455 : -395, z2: side > 0 ? 0 : 5, side };
-  XOVERS.push(c); POINTS[c.id] = 'N';
-}
 // yard + running line (x1 < x2 always; an eastbound train enters a crossover at x1, a westbound one at x2):
-//   from the West, before the platforms: 309 (track A -> running line) or 310 (Line 1 -> running line), then past the station into the yard
+//   from the West, before the platforms: 309 (main A far out) or 310 (main A) -> running line -> past the station -> yard
 //   from the West, after the platforms:  301 (Line 1 -> running line -> yard)
-//   from the East, before the platforms: 308 (track A -> far end of the yard)
-//   from the East, after the platforms:  311 puts it on the running line; stop it and ⇄ Reverse to shunt back to the yard
-//   inside the yard: 302-304 / 305-307 ladders between Yard 1, 2, 3 and the Goods line
-// K1-K3 are fixed curves (no points): the running line dodging round the station building and joining Yard 1.
+//   from the East, before the platforms: 308 (main A -> far end of the yard)
+//   from the East, after the platforms:  401 (Line 1) or 311 (main A) onto the running line; stop and ⇄ Reverse to shunt into the yard
+//   312 / 402: running line round the back of the station (Reverse) or into Line 1 (Normal)
+//   inside the yard: 302-304 / 305-307 ladders between Yard 1, 2, 3 and the Goods line; K3 is a fixed curve into Yard 1
 {
   const add = (id, x1, z1, x2, z2, fixed = false) => { const c = { id, x1, z1, x2, z2, side: Math.sign(x1 + x2) || 1, fixed }; XOVERS.push(c); POINTS[id] = 'N'; };
-  add('301', 490, 0, 570, -12);
+  add('301', 230, 0, 310, -12); add('401', -310, -12, -230, 0);
+  add('312', 270, -70, 430, -12); add('402', -430, -12, -270, -70);
   add('302', 720, -14, 780, -20); add('303', 800, -20, 860, -26); add('304', 880, -26, 940, -32);
   add('305', 1300, -32, 1360, -26); add('306', 1380, -26, 1440, -20); add('307', 1460, -20, 1520, -14);
-  add('308', 1540, -14, 1640, 0);
-  add('309', -1700, 0, -1620, -12);
-  add('310', -700, 0, -620, -12);
-  add('311', -1000, -12, -920, 0);
-  add('K1', -430, -12, -270, -70, true); add('K2', 270, -70, 430, -12, true); add('K3', 620, -12, 680, -14, true);
+  add('308', 1540, -14, 1680, 15);
+  add('309', -1700, 15, -1580, -12);
+  add('310', -900, 15, -800, -12);
+  add('311', -1250, -12, -1150, 15);
+  add('K3', 620, -12, 680, -14, true);
 }
 const XO_BY_ID = Object.fromEntries(XOVERS.map(c => [c.id, c]));
 function segAt(z, x) { return SEGS.find(s => Math.abs(s.z - z) < 0.01 && x >= s.x0 - 0.6 && x <= s.x1 + 0.6); }
@@ -700,7 +698,7 @@ function legZ(legs, p) {
   };
   gravel(1700, 62, 0, 25, 0.012);
   gravel(1110, 36, 1100, -22, 0.014);
-  gravel(TRACK_HALF * 2, 28, 0, 10, 0.008);
+  gravel(TRACK_HALF * 2, 30, 0, 25, 0.008);
 
   const sh = new THREE.Shape(); sh.moveTo(-2.45, 0); sh.lineTo(2.45, 0); sh.lineTo(1.75, 0.4); sh.lineTo(-1.75, 0.4); sh.closePath();
   const ballastMat = new THREE.MeshStandardMaterial({ map: texRepeat(gravelTex, 0.45, 0.45), roughness: 1 });
@@ -775,14 +773,16 @@ function legZ(legs, p) {
     }
   }
   // grey relay / location boxes and cable-route markers beside the track, like on any Indian electrified section
+  const sideZ = x => Math.abs(x) < 560 ? -3.9 : 11.1;    // beside the southernmost track there
+  const nearCurve = (x, m) => XOVERS.some(c => x > c.x1 - m && x < c.x2 + m && Math.min(c.z1, c.z2) < 15);
   for (let x = -1700; x <= 1700; x += 170) {
-    if (Math.abs(x) < 200) continue;
-    if (XOVERS.some(c => x > c.x1 - 30 && x < c.x2 + 30 && (c.z1 <= 0 || c.z2 <= 0))) continue;
-    cb.box(MAT.relay, x, 0.8, -3.9, 1.1, 1.6, 0.8); cb.box(MAT.relay, x, 1.65, -3.9, 1.25, 0.1, 0.95);
-    cb.box(MAT.concrete, x, 0.06, -3.9, 1.4, 0.12, 1.1);
-    cb.box(MAT.relay, x + 1.6, 0.6, -3.9, 0.7, 1.2, 0.6);
+    if (Math.abs(x) < 200 || nearCurve(x, 30)) continue;
+    const z = sideZ(x);
+    cb.box(MAT.relay, x, 0.8, z, 1.1, 1.6, 0.8); cb.box(MAT.relay, x, 1.65, z, 1.25, 0.1, 0.95);
+    cb.box(MAT.concrete, x, 0.06, z, 1.4, 0.12, 1.1);
+    cb.box(MAT.relay, x + 1.6, 0.6, z, 0.7, 1.2, 0.6);
   }
-  for (let x = -1500; x <= 1500; x += 50) if (Math.abs(x) > 180) cb.box(MAT.white, x, 0.35, -3.0, 0.12, 0.7, 0.12);
+  for (let x = -1500; x <= 1500; x += 50) if (Math.abs(x) > 180 && !nearCurve(x, 6)) cb.box(MAT.white, x, 0.35, sideZ(x) + 0.9, 0.12, 0.7, 0.12);
   scene.add(cb.build({ cast: false }));
 
   // tall grass tufts in the cess between and beside the tracks
@@ -1059,9 +1059,9 @@ const stationB = new Builder();
   const ALLZ = [0, 5, 10, 15, 20, 30, 35, 45, 50];
   for (let x = -TRACK_HALF + 40; x < TRACK_HALF; x += 60) {
     if (Math.abs(x - 125) < 4) continue;
-    const u = Math.abs(x), z2 = u < 540 ? 52.6 : u < 760 ? 37.6 : 22.6;
-    // where a curve to the running line / yard leaves Line 1, the portal's south mast stands beyond it
-    const z1 = XOVERS.some(c => (c.z1 < 0 || c.z2 < 0) && (c.z1 === 0 || c.z2 === 0) && x > c.x1 - 8 && x < c.x2 + 8) ? -16 : -2.45;
+    const u = Math.abs(x), z2 = u < 440 ? 52.6 : 37.6;
+    // south mast beside the southernmost track; where a curve runs off to the running line / yard it stands beyond that
+    const z1 = XOVERS.some(c => Math.min(c.z1, c.z2) < 0 && x > c.x1 - 8 && x < c.x2 + 8) ? -16 : u < 520 ? -2.45 : 12.55;
     const poles = [z1, z2]; if (u < 150) poles.push(10, 25);
     for (const z of poles) { b.box(MAT.pole, x, beamY / 2, z, 0.32, beamY + 0.5, 0.32); b.box(MAT.concreteDark, x, 0.25, z, 0.9, 0.5, 0.9); }
     b.box(MAT.pole, x, beamY, (z1 + z2) / 2, 0.28, 0.4, z2 - z1);
@@ -1105,7 +1105,7 @@ const stationB = new Builder();
 // =====================================================================
 //  WORLD: SCENERY (trees, hills, fields, villages, people, autos)
 // =====================================================================
-const villageCenters = [[-470, -120], [-360, -190], [430, 120], [660, 80], [-900, 150], [920, -130], [1400, 160], [-1500, -170], [180, -230]];
+const villageCenters = [[-470, -120], [-360, -190], [430, 125], [660, 125], [-900, 150], [920, -130], [1400, 160], [-1500, -170], [180, -230]];
 function nearVillage(x, z) { return villageCenters.some(([vx, vz]) => Math.hypot(x - vx, z - vz) < 70); }
 {
   // fields on a grid (no overlaps)
@@ -1981,7 +1981,7 @@ class Train {
       }
       if (this.yardT <= 0) {
         this.holdT = 20; this.updateShunting();
-        const out = this.dir > 0 ? 'via point 308 to track A' : 'over the running line — point 301 to Line 1, or on behind the station to 310/311/309';
+        const out = this.dir > 0 ? 'via point 308 to main track A' : 'over the running line — 301 into Line 1, or 312 Reverse to go round behind the station to 310/309';
         log(`${this.number}: yard work finished — ready to leave the yard towards the ${this.dir > 0 ? 'East' : 'West'} ${out}.`, 'warn');
       }
       return;
@@ -2691,9 +2691,8 @@ drawClock(state.time);
 controls.autoRotate = true; controls.autoRotateSpeed = 0.35;
 // showcase trains on intro screen
 {
-  POINTS['105'] = 'R'; POINTS['205'] = 'R';   // demo: track E -> Line 3 -> track E
   const a = new Train('express', 1, 20, 1200); a.v = 14;
-  const b = new Train('goods', -1, 5, 900); b.v = 12;
+  const b = new Train('goods', -1, 30, 900); b.v = 12;
   refreshAspects();
   trains.push(a, b);
 }
