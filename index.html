@@ -162,7 +162,7 @@ html,body{margin:0;height:100%;overflow:hidden;background:#000;font-family:'Sego
 </div>
 
 <div id="panelwrap" class="hud win hidden">
-  <div class="winhead"><b>Panel</b><span class="hint">click signal = ON/OFF · click a crossover = throw point (green = set) · wheel = zoom · drag = pan · drag corner = resize · H = hide</span><button class="btn sm" id="pzStation">Station</button><button class="btn sm" id="pzFit">Fit all</button><input type="range" class="opac" min="10" max="95" value="45" title="Transparency"></div>
+  <div class="winhead"><b>Panel</b><span class="hint">click a train = select · click signal = ON/OFF · click a crossover = throw point (green = set) · wheel = zoom · drag = pan · drag corner = resize · H = hide</span><button class="btn sm" id="pzStation">Station</button><button class="btn sm" id="pzFit">Fit all</button><input type="range" class="opac" min="10" max="95" value="45" title="Transparency"></div>
   <canvas id="panel"></canvas>
 </div>
 
@@ -2668,6 +2668,7 @@ function drawPanel() {
   for (const t of trains) {
     const pts = t.bodyPoints(6), isSel = t === selected;
     const path = () => { g.beginPath(); pts.forEach(([x, z], i) => i ? g.lineTo(PX(x), PY(z)) : g.moveTo(PX(x), PY(z))); };
+    if (hover && hover.train === t && !isSel) { g.strokeStyle = 'rgba(255,255,255,0.85)'; g.lineWidth = 12; path(); g.stroke(); }
     if (isSel) {   // glowing halo round the selected train
       const pulse = 0.5 + 0.5 * Math.sin(performance.now() / 220);
       g.strokeStyle = `rgba(255,179,0,${0.25 + 0.35 * pulse})`; g.lineWidth = 18 + 6 * pulse; path(); g.stroke();
@@ -2710,6 +2711,17 @@ function panelHit(e) {
   const r = pc.getBoundingClientRect(), mx = e.clientX - r.left, my = e.clientY - r.top;
   const sig = signals.find(s => { const [x, y] = sigPos(s); return Math.hypot(mx - x, my - y) < 8; });
   if (sig) return { sig };
+  // a train under the pointer (its drawn body line)
+  let tb = null, td = 7;
+  for (const t of trains) {
+    const pts = t.bodyPoints(6).map(([x, z]) => [PX(x), PY(z)]);
+    for (let i = 0; i < pts.length; i++) {
+      const [ax, ay] = pts[i], [bx, by] = pts[Math.min(i + 1, pts.length - 1)], vx = bx - ax, vy = by - ay, L = vx * vx + vy * vy;
+      const k = L ? Math.max(0, Math.min(1, ((mx - ax) * vx + (my - ay) * vy) / L)) : 0, d = Math.hypot(mx - ax - k * vx, my - ay - k * vy);
+      if (d < td) { td = d; tb = t; }
+    }
+  }
+  if (tb) return { train: tb };
   let best = null, bd = 8;   // nearest crossover line under the pointer
   for (const c of XOVERS) {
     if (c.fixed || PX(c.x2) < mx - 12 || PX(c.x1) > mx + 12) continue;
@@ -2724,7 +2736,13 @@ pc.addEventListener('pointermove', e => {
   hover = panelHit(e); pc.style.cursor = pdrag && pdrag.moved ? 'grabbing' : hover ? 'pointer' : 'grab';
 });
 pc.addEventListener('pointerup', e => {
-  if (pdrag && !pdrag.moved) { const h = panelHit(e); if (h) { if (h.sig) clickSignal(h.sig); else togglePoint(h.pt); } }
+  if (pdrag && !pdrag.moved) {
+    const h = panelHit(e);
+    if (h && h.train) {                                   // select the train, as clicking its card does
+      selected = h.train; if (camMode === 'follow') setView('follow');
+      renderTrainList(); cards.get(h.train)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); beep(760);
+    } else if (h) { if (h.sig) clickSignal(h.sig); else togglePoint(h.pt); }
+  }
   pdrag = null;
 });
 function clampPan() { const lim = MAPHALF * (1 - 1 / pv.zoom); pv.pan = Math.max(-lim, Math.min(lim, pv.pan)); }
