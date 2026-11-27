@@ -198,9 +198,11 @@ const lineById = id => LINES.find(l => l.id === id);
 const SPAWN_X = 2500, DESPAWN_X = 2650, HALT_X = 158;
 const BRAKE = 0.7;
 const HINDI = "'Nirmala UI','Mangal','Noto Sans Devanagari',sans-serif";
+// browser storage can be blocked (private window, embedded page): never let that stop the game
+const LS = { get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch (e) { } } };
 // ---- station name (editable in Settings, stored in this browser) ----
 const SN_DEFAULT = { en: 'Chandanpur', hi: 'चंदनपुर', type: 'Junction', code: 'CDP', msl: '112.40', traffic: 'normal' };
-const SN = Object.assign({}, SN_DEFAULT, JSON.parse(localStorage.getItem('sm_station') || '{}'));
+const SN = Object.assign({}, SN_DEFAULT, (() => { try { return JSON.parse(LS.get('sm_station') || '{}'); } catch (e) { return {}; } })());
 const SUFFIX = { Junction: ['JN.', 'JUNCTION', 'जं.', 'जंक्शन', 'Jn.'], Central: ['CENTRAL', 'CENTRAL', 'सेंट्रल', 'सेंट्रल', 'Central'], Cantt: ['CANTT.', 'CANTONMENT', 'कैंट', 'छावनी', 'Cantt.'], Road: ['ROAD', 'ROAD', 'रोड', 'रोड', 'Road'], City: ['CITY', 'CITY', 'सिटी', 'सिटी', 'City'], Terminus: ['TERMINUS', 'TERMINUS', 'टर्मिनस', 'टर्मिनस', 'Terminus'], None: ['', '', '', '', ''] };
 {
   const sx = SUFFIX[SN.type] || SUFFIX.None, up = SN.en.trim().toUpperCase(), hi = SN.hi.trim() || SN.en.trim();
@@ -227,7 +229,7 @@ const GPU_NAME = (() => {
   } catch (e) { return ''; }
 })();
 const WEAK_GPU = /intel|hd graphics|uhd|iris|mali|adreno|powervr|swiftshader|llvmpipe|apple gpu/i.test(GPU_NAME) || (navigator.hardwareConcurrency || 8) <= 4;
-const savedQ = localStorage.getItem('smq');
+const savedQ = LS.get('smq');
 let HQ = savedQ ? savedQ !== 'low' : !WEAK_GPU;
 const renderer = new THREE.WebGLRenderer({ antialias: HQ, powerPreference: 'high-performance' });
 const MAX_PR = Math.min(devicePixelRatio, HQ ? 1.5 : 1);
@@ -2534,7 +2536,7 @@ document.querySelectorAll('#speedBtns .btn').forEach(b => b.addEventListener('cl
 }));
 document.querySelectorAll('#todBtns .btn').forEach(b => b.addEventListener('click', () => setTOD(b.dataset.tod)));
 $('qBtn').textContent = HQ ? 'Graphics: High' : 'Graphics: Low';
-$('qBtn').addEventListener('click', () => { localStorage.setItem('smq', HQ ? 'low' : 'high'); location.reload(); });
+$('qBtn').addEventListener('click', () => { LS.set('smq', HQ ? 'low' : 'high'); location.reload(); });
 $('muteBtn').addEventListener('click', () => { muted = !muted; $('muteBtn').textContent = muted ? '🔇' : '🔊'; });
 
 // --- settings ---
@@ -2555,7 +2557,7 @@ $('sClose').addEventListener('click', () => $('settings').classList.add('hidden'
 $('sDefault').addEventListener('click', () => { Object.assign(SN, SN_DEFAULT); openSettings(); });
 $('sSave').addEventListener('click', () => {
   const v = { en: $('sEn').value.trim() || SN_DEFAULT.en, hi: $('sHi').value.trim(), type: $('sType').value, code: ($('sCode').value.trim() || 'STN').toUpperCase(), msl: $('sMsl').value.trim() || '100.00', traffic: $('sTraffic').value };
-  localStorage.setItem('sm_station', JSON.stringify(v)); location.reload();
+  LS.set('sm_station', JSON.stringify(v)); location.reload();
 });
 
 $('startBtn').addEventListener('click', () => {
