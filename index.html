@@ -81,6 +81,7 @@ html,body{margin:0;height:100%;overflow:hidden;background:#000;font-family:'Sego
 .winhead input[type=range]{width:80px}
 #panelwrap{left:16px;bottom:16px;top:auto;width:min(1000px,calc(100vw - 420px));height:330px}
 #panel{flex:1;width:100%;height:auto;min-height:0;display:block;border-radius:0;touch-action:none}
+#panelwrap{background:rgba(5,12,26,var(--a,0.55));border-color:rgba(80,200,230,0.35)}
 #side{top:64px;right:16px;bottom:auto;width:370px;height:52vh;gap:0}
 #diary{top:calc(64px + 52vh + 10px);right:16px;bottom:auto;width:370px;height:calc(100vh - 52vh - 92px);min-height:110px}
 #diary #log{padding-top:6px}
@@ -186,7 +187,7 @@ html,body{margin:0;height:100%;overflow:hidden;background:#000;font-family:'Sego
 </div>
 
 <div id="panelwrap" class="hud win hidden">
-  <div class="winhead"><b>Panel</b><span class="hint">click A–D at the edges = main line beyond the Outer: arrivals / departures only · click a train = select · click signal = ON/OFF · click a crossover = throw point (green = set) · wheel = zoom · drag = pan · drag corner = resize · H = hide</span><button class="btn sm" id="pzOut" title="Zoom out">−</button><button class="btn sm" id="pzIn" title="Zoom in">+</button><button class="btn sm" id="pzStation">Station</button><button class="btn sm" id="pzFit">Fit all</button><input type="range" class="opac" min="10" max="95" value="45" title="Transparency"></div>
+  <div class="winhead"><b>Panel</b><span class="hint">click A–D at the edges = main line beyond the Outer: arrivals / departures only · click a train = select · click signal = ON/OFF · click a crossover = throw point (green = set) · wheel = zoom · drag = pan · drag corner = resize · H = hide</span><button class="btn sm" id="pzOut" title="Zoom out">−</button><button class="btn sm" id="pzIn" title="Zoom in">+</button><button class="btn sm" id="pzStation">Station</button><button class="btn sm" id="pzFit">Fit all</button><input type="range" class="opac" min="10" max="98" value="90" title="Transparency"></div>
   <canvas id="panel"></canvas>
 </div>
 
@@ -2811,26 +2812,27 @@ function drawPanel() {
   const g = pctx; g.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
   g.clearRect(0, 0, PW, PH);
   const blink = Math.sin(performance.now() / 160) > 0;
-  g.font = '600 10px Segoe UI'; g.fillStyle = '#cfe8da'; g.textAlign = 'left'; g.fillText('◄ WEST', 8, 14); g.textAlign = 'right'; g.fillText('EAST ►', PW - 8, 14);
-  // platforms
-  g.fillStyle = 'rgba(120,140,128,0.45)';
-  for (const [z0, z1, label] of [[-4.5, -1.75, 'CONCOURSE'], [6.75, 13.25, 'PF 1 / 2'], [21.75, 28.25, 'PF 3 / 4'], [36.75, 41, 'PF 5']]) {
-    g.fillRect(PX(-160), PY(z0), PX(160) - PX(-160), PY(z1) - PY(z0));
-    g.fillStyle = '#e6f2ea'; g.textAlign = 'center'; g.font = '600 10px Segoe UI'; g.fillText(label, PX(0), (PY(z0) + PY(z1)) / 2 + 4); g.fillStyle = 'rgba(120,140,128,0.45)';
-  }
-  g.fillStyle = 'rgba(120,140,128,0.45)'; g.fillRect(PX(-150), PY(-102), PX(150) - PX(-150), PY(-95.75) - PY(-102));
-  g.fillStyle = '#e6f2ea'; g.textAlign = 'left'; g.fillText('YARD · GOODS SHED', PX(150) + 6, PY(-99) + 4); g.textAlign = 'center';
-  g.fillStyle = 'rgba(120,140,128,0.3)'; g.fillRect(PX(-60), PY(-28), PX(60) - PX(-60), PY(-10) - PY(-28));
-  g.fillStyle = '#e6f2ea'; g.fillText('STATION', PX(0), PY(-19) + 4);
-  // track
-  g.lineCap = 'round'; g.lineWidth = 3; g.strokeStyle = '#b8c9bf';
-  for (const s of SEGS) { g.beginPath(); g.moveTo(PX(s.x0), PY(s.z)); g.lineTo(PX(s.x1), PY(s.z)); g.stroke(); }
-  // crossovers: a point set Reverse lights its crossover green; Normal ones stay faint. Click a crossover to throw it.
+  // control-room schematic: faint blueprint grid behind everything
+  g.strokeStyle = 'rgba(90,170,220,0.06)'; g.lineWidth = 1; g.beginPath();
+  for (let x = (PW / 2) % 24; x < PW; x += 24) { g.moveTo(x + 0.5, 0); g.lineTo(x + 0.5, PH); }
+  for (let y = 0; y < PH; y += 24) { g.moveTo(0, y + 0.5); g.lineTo(PW, y + 0.5); }
+  g.stroke();
+  g.font = '600 10px Segoe UI'; g.fillStyle = '#8fd8ee'; g.textAlign = 'left'; g.fillText('◄ WEST', 8, 14); g.textAlign = 'right'; g.fillText('EAST ►', PW - 8, 14);
+  // platforms and buildings: dim outlined blocks (each platform face is labelled on its own track, see below)
+  const block = (x0, x1, z0, z1) => { g.fillStyle = 'rgba(70,150,190,0.14)'; g.fillRect(PX(x0), PY(z0), PX(x1) - PX(x0), PY(z1) - PY(z0)); g.strokeStyle = 'rgba(110,200,235,0.35)'; g.lineWidth = 1; g.strokeRect(PX(x0) + 0.5, PY(z0) + 0.5, PX(x1) - PX(x0) - 1, PY(z1) - PY(z0) - 1); };
+  for (const [z0, z1] of [[-4.5, -1.75], [6.75, 13.25], [21.75, 28.25], [36.75, 41]]) block(-160, 160, z0, z1);
+  block(-150, 150, -102, -95.75); block(-60, 60, -28, -10);
+  const nameTag = (text, X, Y) => { g.font = 'bold 9px Segoe UI'; const w = g.measureText(text).width + 10; g.fillStyle = '#9fe3f5'; g.fillRect(X - w / 2, Y - 6.5, w, 13); g.fillStyle = '#061420'; g.textAlign = 'center'; g.fillText(text, X, Y + 3); };
+  nameTag(SN.short.toUpperCase(), PX(0), PY(-19)); nameTag('YARD · GOODS SHED', PX(150) + 58, PY(-99));
+  // track: white lines with a soft glow
+  g.lineCap = 'round';
+  const glowLine = (draw, w) => { g.strokeStyle = 'rgba(200,235,255,0.10)'; g.lineWidth = w + 5; draw(); g.strokeStyle = '#e9f1f5'; g.lineWidth = w; draw(); };
+  for (const s of SEGS) glowLine(() => { g.beginPath(); g.moveTo(PX(s.x0), PY(s.z)); g.lineTo(PX(s.x1), PY(s.z)); g.stroke(); }, 2.4);
+  // crossovers = points: Normal -> the diverging leg stays dim; Reverse -> it lights up white. Click a crossover to throw it.
   for (const c of XOVERS) {
-    const zf = x => sCurve(x, c.x1, c.x2, c.z1, c.z2), r = !c.fixed && POINTS[c.id] === 'R', hov = hover && hover.pt === c.id;
-    if (r) { g.strokeStyle = 'rgba(46,230,120,0.28)'; g.lineWidth = 9; strokeFn(g, c.x1, c.x2, zf, 14); }
-    g.strokeStyle = c.fixed ? '#b8c9bf' : hov ? '#ffffff' : r ? '#35e27c' : 'rgba(150,175,160,0.45)';
-    g.lineWidth = c.fixed ? 3 : hov ? 4 : r ? 3.5 : 2; strokeFn(g, c.x1, c.x2, zf, 14);
+    const zf = x => sCurve(x, c.x1, c.x2, c.z1, c.z2), r = c.fixed || POINTS[c.id] === 'R', hov = hover && hover.pt === c.id;
+    if (r || hov) glowLine(() => strokeFn(g, c.x1, c.x2, zf, 14), hov ? 3 : 2.4);
+    else { g.strokeStyle = 'rgba(160,200,220,0.28)'; g.lineWidth = 1.6; strokeFn(g, c.x1, c.x2, zf, 14); }
   }
   g.font = 'bold 10px Segoe UI'; g.fillStyle = '#e6f2ea'; g.textAlign = 'left';
   for (const c of CORR) for (const side of ['W', 'E']) {
@@ -2850,15 +2852,24 @@ function drawPanel() {
       }
     }
   }
-  g.font = 'bold 10px Segoe UI'; g.fillStyle = '#e6f2ea';
-  for (const [n, z] of Object.entries(LINE_Z)) { g.textAlign = 'center'; g.fillStyle = '#9fd0b5'; if (+n === RUN_LINE) { g.textAlign = 'left'; g.fillText('RUNNING LINE', PX(-1600), PY(z) - 4); }
-    else if (+n > 8) { const x0 = SEGS.find(sg => sg.z === z).x0; g.textAlign = 'right'; g.fillText(+n === GOODS_LINE ? 'GOODS' : 'Y' + (n - 8), PX(x0) - 4, PY(z) + 3); } else g.fillText('L' + n + (LINE_PF[n] ? ' PF' + LINE_PF[n] : ''), PX(-190), PY(z) - 3); }
-  // locked routes in red
+  // set (locked) routes light up green along the whole path, as on a route-relay panel
   for (const r of routes) {
     if (r.cells.length < 2) continue;
     const path = () => { g.beginPath(); r.cells.forEach(([x, z], i) => i ? g.lineTo(PX(x), PY(z)) : g.moveTo(PX(x), PY(z))); };
-    g.strokeStyle = 'rgba(255,40,30,0.3)'; g.lineWidth = 12; path(); g.stroke();
-    g.strokeStyle = '#ff3b30'; g.lineWidth = 4; path(); g.stroke();
+    g.strokeStyle = 'rgba(40,230,90,0.25)'; g.lineWidth = 10; path(); g.stroke();
+    g.strokeStyle = '#38e05c'; g.lineWidth = 3; path(); g.stroke();
+  }
+  // track numbers written ON the track (the line is broken round the label): every platform its own number, both ends
+  const trackTag = (text, X, Y, col = '#e9f1f5') => {
+    g.font = 'bold 9px Segoe UI'; const w = g.measureText(text).width + 8;
+    g.fillStyle = 'rgba(5,12,26,0.95)'; g.fillRect(X - w / 2, Y - 5, w, 10);
+    g.fillStyle = col; g.textAlign = 'center'; g.fillText(text, X, Y + 3.2);
+  };
+  for (const [n, z] of Object.entries(LINE_Z)) {
+    if (+n === RUN_LINE) { trackTag('RUNNING LINE', PX(-1100), PY(z), '#9fe3f5'); continue; }
+    if (+n > 8) { const sg = SEGS.find(q => q.z === z); for (const x of [sg.x0 + 40]) trackTag(+n === GOODS_LINE ? 'GOODS' : 'Y' + (n - 8), PX(x), PY(z), '#9fe3f5'); continue; }
+    const t = LINE_PF[n] ? 'PF ' + LINE_PF[n] : 'L' + n;
+    for (const x of [-295, 295]) trackTag(t, PX(x), PY(z), LINE_PF[n] ? '#ffffff' : '#9fe3f5');   // clear of the Starters (172 m) and the inner crossovers
   }
   // predicted paths (where each train will go with the points as set)
   for (const t of trains) {
@@ -2879,14 +2890,22 @@ function drawPanel() {
       g.strokeStyle = `rgba(255,179,0,${0.25 + 0.35 * pulse})`; g.lineWidth = 18 + 6 * pulse; path(); g.stroke();
       g.strokeStyle = '#ffffff'; g.lineWidth = 10; path(); g.stroke();
     }
-    g.strokeStyle = t.crashed ? (blink ? '#ffffff' : '#ff2a1a') : isSel ? '#ffb300' : t.stabled ? '#b06a3a' : t.type === 'shunter' ? '#e0b020' : t.type === 'light' ? '#ff7a40' : '#ff2a1a'; g.lineWidth = 7;
-    path(); g.stroke();
-    if (!t.stabled) { const X = PX(t.front), Y = PY(t.zOf(t.front)); g.fillStyle = '#fff'; g.beginPath(); g.moveTo(X + t.dir * 7, Y); g.lineTo(X, Y - 5); g.lineTo(X, Y + 5); g.closePath(); g.fill(); }
-    // train number in very small type written on the train itself (no label boxes over the map)
+    // occupied track in red under the train, then one white block per vehicle
+    g.strokeStyle = t.stabled ? 'rgba(200,120,70,0.5)' : 'rgba(255,50,40,0.35)'; g.lineWidth = 9; path(); g.stroke();
+    g.strokeStyle = t.stabled ? '#c27a45' : '#ff3b30'; g.lineWidth = 3; path(); g.stroke();
+    const k = Math.abs(PX(100) - PX(0)) / 100;                       // pixels per metre at this zoom
+    const carCol = t.crashed ? (blink ? '#ffffff' : '#ff2a1a') : isSel ? '#ffd166' : t.stabled ? '#e8c7a8' : t.type === 'shunter' ? '#ffd54f' : '#f4f8fb';
+    g.fillStyle = carCol;
+    for (const c of t.cars) {
+      const xm = t.front - t.dir * (c.off + c.len / 2), X = PX(xm), Y = PY(t.zOf(xm)), w = Math.max(2, c.len * k - 1.2);
+      g.fillRect(X - w / 2, Y - 2.6, w, 5.2);
+    }
+    if (!t.stabled) { const X = PX(t.front), Y = PY(t.zOf(t.front)); g.fillStyle = carCol; g.beginPath(); g.moveTo(X + t.dir * 6, Y); g.lineTo(X + t.dir * 1, Y - 4); g.lineTo(X + t.dir * 1, Y + 4); g.closePath(); g.fill(); }
+    // label under the train: number · where its points lead
     const [mx, mz] = pts[Math.floor(pts.length / 2)];
-    g.font = 'bold 6.5px Segoe UI'; g.textAlign = 'center'; g.textBaseline = 'middle';
-    g.fillStyle = isSel ? '#1a1205' : '#ffffff'; g.fillText(t.number, PX(mx), PY(mz) + 0.5);
-    g.textBaseline = 'alphabetic';
+    g.font = '600 8px Segoe UI'; g.textAlign = 'center';
+    g.fillStyle = isSel ? '#ffd166' : '#7fc8ff';
+    g.fillText(t.stabled ? t.number : `${t.number}${t.dest ? ' · ' + lineShort(t.dest) : ''}`, PX(mx), PY(mz) + 12);
     const pr = t.prep();
     if (pr) {   // departure preparation: small bar just above the train
       const bw = 30, bx = PX(mx) - bw / 2, by = PY(mz) - 11;
@@ -2909,13 +2928,21 @@ function drawPanel() {
   // signals
   for (const s of signals) {
     const [x, y] = sigPos(s); if (x < -10 || x > PW + 10) continue;
-    const col = s.kind === 'shunt' ? (s.aspect ? '#ffffff' : '#ff2a1a') : ['#ff2a1a', '#ffd21a', '#27e05a'][s.aspect];
-    g.fillStyle = col; g.shadowColor = col; g.shadowBlur = 4;
-    if (s.kind === 'shunt') { g.fillRect(x - 2.5, y - 2.5, 5, 5); g.shadowBlur = 0; }
-    else { g.beginPath(); g.arc(x, y, s.kind === 'home' ? 3.6 : 3, 0, Math.PI * 2); g.fill(); g.shadowBlur = 0; }
-    if (hover && hover.sig === s) { g.strokeStyle = '#fff'; g.lineWidth = 1.5; g.beginPath(); g.arc(x, y, 6, 0, Math.PI * 2); g.stroke(); }
-    g.fillStyle = '#eaf5ee'; g.font = '600 8px Segoe UI'; g.textAlign = s.dir > 0 ? 'right' : 'left';
-    g.fillText(s.id + (s.kind === 'home' && s.routeLine ? `→${s.routeLine}` : ''), x + (s.dir > 0 ? -5 : 5), y + 3);
+    // ON = a "D" (flat back, round face towards the train) glowing red; OFF = a solid arrow pointing the way, green (yellow = caution)
+    const col = s.kind === 'shunt' ? (s.aspect ? '#ffffff' : '#ff2a1a') : ['#ff2a1a', '#ffd21a', '#38e05c'][s.aspect];
+    const r = s.kind === 'shunt' ? 3 : s.kind === 'home' ? 4.6 : 4, d = s.dir;
+    g.shadowColor = col; g.shadowBlur = 6; g.lineWidth = 1.6;
+    if (!s.aspect) {
+      g.fillStyle = 'rgba(5,12,26,0.95)'; g.strokeStyle = '#ffffff';
+      g.beginPath(); g.moveTo(x + d * r * 0.2, y - r); g.arc(x + d * r * 0.2, y, r, -Math.PI / 2, Math.PI / 2, d < 0); g.closePath(); g.fill(); g.stroke();
+      g.strokeStyle = col; g.lineWidth = 1; g.stroke();
+    } else {
+      g.fillStyle = col; g.beginPath(); g.moveTo(x + d * r * 1.2, y); g.lineTo(x - d * r * 0.8, y - r); g.lineTo(x - d * r * 0.8, y + r); g.closePath(); g.fill();
+    }
+    g.shadowBlur = 0;
+    if (hover && hover.sig === s) { g.strokeStyle = '#fff'; g.lineWidth = 1.5; g.beginPath(); g.arc(x, y, 7, 0, Math.PI * 2); g.stroke(); }
+    g.fillStyle = 'rgba(200,225,240,0.75)'; g.font = '600 7.5px Segoe UI'; g.textAlign = s.dir > 0 ? 'right' : 'left';
+    g.fillText(s.id + (s.kind === 'home' && s.routeLine ? `→${s.routeLine}` : ''), x + (s.dir > 0 ? -7 : 7), y + 3);
   }
 }
 function panelHit(e) {
