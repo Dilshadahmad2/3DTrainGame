@@ -1600,43 +1600,62 @@ function buildShunterProto() {
   g.userData = { len: 14.3, rear: -13.9, loco: true, stack: [-6.2, 4.2, 0] };
   return g;
 }
-// WDM-3A / WDP style diesel: short hood, cab, long hood with louvres, orange + cream livery, exhaust stack
+// WDM-3A style diesel (ALCO): rounded short hood, cab with cream roof, long hood with louvres and doors,
+// taller radiator section with twin fans, spark-arrester stack, walkway railings, Co-Co bogies; orange / cream / red
 function buildDieselProto() {
   const g = new THREE.Group(), b = new Builder();
-  const org = std(0xdc5f1c, { roughness: 0.45, metalness: 0.2 }), crm = std(0xf0e2b6, { roughness: 0.5 }), red = std(0x8a1e18, { roughness: 0.5 });
-  const grille = std(0x3a3c3e, { metalness: 0.4, roughness: 0.6 });
-  b.box(MAT.darkMetal, -9.6, 1.2, 0, 18.8, 0.5, 3.0);                       // underframe / walkway
-  b.box(org, -9.6, 1.5, 0, 18.8, 0.12, 3.0);
-  b.box(org, -2.2, 2.55, 0, 3.0, 2.0, 2.4);                                 // short hood
-  b.box(org, -5.2, 2.95, 0, 3.0, 2.8, 3.0);                                 // cab
-  b.box(crm, -5.2, 4.42, 0, 3.1, 0.16, 3.1);                                // cab roof
-  b.box(org, -12.6, 2.75, 0, 12.0, 2.4, 2.5);                               // long hood
-  b.box(std(0x8d8f8a, { metalness: 0.4 }), -12.6, 4.0, 0, 12.0, 0.12, 2.3);  // hood roof
-  for (const z of [-1.26, 1.26]) {
-    b.box(crm, -12.6, 2.3, z, 12.0, 0.32, 0.02); b.box(red, -12.6, 2.1, z * 1.001, 12.0, 0.07, 0.02);   // cream band + red line
-    b.box(crm, -2.2, 2.2, z * 0.96, 3.0, 0.3, 0.02);
-    for (let x = -7.6; x > -18; x -= 1.15) b.box(grille, x, 3.25, z * 1.002, 0.8, 0.9, 0.02);           // louvres
-    b.box(MAT.glass, -5.2, 3.6, z * 1.2, 2.2, 0.9, 0.03);                                                // cab side windows
-    b.box(MAT.yellow, -9.6, 2.0, z * 1.18, 18.6, 0.04, 0.04);                                            // walkway handrail
-    for (let x = -1; x > -19; x -= 2.3) b.box(MAT.yellow, x, 1.78, z * 1.18, 0.04, 0.5, 0.04);
+  const org = std(0xd9581c, { roughness: 0.42, metalness: 0.2 }), crm = std(0xf0e0b0, { roughness: 0.5 }), red = std(0x8a1e18, { roughness: 0.5 });
+  const grille = std(0x2f3133, { metalness: 0.45, roughness: 0.6 }), walk = std(0x4f5356, { metalness: 0.4, roughness: 0.7 }), rail = std(0xf4efe2, { roughness: 0.5 });
+  // underframe, walkway, sole bar stripes
+  b.box(MAT.darkMetal, -9.6, 1.18, 0, 18.7, 0.45, 2.9);
+  b.box(walk, -9.6, 1.43, 0, 18.9, 0.06, 3.0);
+  for (const z of [-1.49, 1.49]) { b.box(org, -9.6, 1.26, z, 18.7, 0.22, 0.03); b.box(red, -9.6, 1.12, z, 18.7, 0.06, 0.03); }
+  // short hood (nose), cab, long hood, radiator section
+  b.add(hoodGeo(2.4, 2.2, 1.95, 0.42), org, M(-0.55, 1.46, 0));
+  b.box(org, -4.35, 2.85, 0, 2.8, 2.8, 2.95);
+  b.add(hoodGeo(3.0, 3.1, 0.32, 0.26), crm, M(-2.85, 4.24, 0));                       // cab roof
+  b.add(hoodGeo(9.5, 2.3, 2.3, 0.42), org, M(-5.75, 1.46, 0));                         // long hood
+  b.add(hoodGeo(3.3, 2.55, 2.68, 0.46), org, M(-15.25, 1.46, 0));                      // radiator section (taller, wider)
+  // cream band + red pinstripe along the hoods, cab and nose
+  for (const z of [-1.0, 1.0]) {
+    b.box(crm, -1.75, 2.35, z * 1.105, 2.4, 0.34, 0.02); b.box(crm, -4.35, 2.35, z * 1.48, 2.8, 0.34, 0.02);
+    b.box(crm, -10.5, 2.35, z * 1.155, 9.5, 0.34, 0.02); b.box(crm, -16.9, 2.35, z * 1.28, 3.3, 0.34, 0.02);
+    b.box(red, -10.5, 2.15, z * 1.156, 9.5, 0.05, 0.02); b.box(red, -16.9, 2.15, z * 1.281, 3.3, 0.05, 0.02);
+    for (let x = -6.3; x > -15; x -= 1.18) { b.box(grille, x, 3.05, z * 1.156, 0.78, 0.62, 0.02); b.box(MAT.darkMetal, x + 0.5, 2.6, z * 1.157, 0.02, 1.9, 0.02); }   // louvres + door seams
+    for (let x = -15.7; x > -18.4; x -= 0.12) b.box(grille, x, 3.2, z * 1.281, 0.05, 1.3, 0.02);                                                   // radiator slats
+    // cab windows and door
+    b.box(MAT.black, -3.6, 3.55, z * 1.48, 1.2, 0.85, 0.03); b.box(MAT.glass, -3.6, 3.55, z * 1.482, 1.1, 0.75, 0.02);
+    b.box(MAT.darkMetal, -5.1, 2.6, z * 1.481, 0.8, 1.9, 0.02); b.box(rail, -5.55, 2.6, z * 1.5, 0.04, 1.3, 0.04);
   }
-  for (const x of [-3.71, -6.69]) b.box(MAT.glass, x, 3.65, 0, 0.03, 0.8, 2.4);     // cab front / rear windows
-  // exhaust stack, radiator fans
-  b.cyl(MAT.black, -8.6, 4.2, 0, 0.22, 0.45);
-  for (const x of [-15.5, -17.2]) { b.cyl(grille, x, 4.08, 0, 0.75, 0.06); b.cyl(MAT.black, x, 4.1, 0, 0.6, 0.05); }
-  // fuel tank, bogies, buffers, lights
-  b.box(std(0x2e3134, { metalness: 0.4 }), -9.6, 0.85, 0, 5.4, 0.75, 2.3);
-  bogie(b, -3.6, 3, 1.75, 0.55); bogie(b, -15.6, 3, 1.75, 0.55);
+  for (const x of [-2.94, -5.76]) for (const z of [-0.68, 0.68]) { b.box(MAT.black, x, 3.6, z, 0.03, 0.85, 1.05); b.box(MAT.glass, x + (x > -4 ? 0.01 : -0.01), 3.6, z, 0.02, 0.75, 0.95); }   // cab front / rear
+  for (const x of [-2.8, -5.9]) b.box(org, x, 4.08, 0, 0.3, 0.05, 2.6);                // sun visors
+  // stack with spark arrester, radiator fans, horns, sand boxes
+  b.cyl(MAT.black, -8.4, 3.92, 0, 0.21, 0.36); b.cyl(MAT.black, -8.4, 4.12, 0, 0.3, 0.12); b.cyl(grille, -8.4, 4.2, 0, 0.26, 0.04);
+  for (const x of [-15.9, -17.6]) { b.cyl(grille, x, 4.15, 0, 0.72, 0.05); b.cyl(MAT.black, x, 4.17, 0, 0.62, 0.04); for (let a = 0; a < 3; a++) b.box(grille, x, 4.19, 0, 1.2, 0.02, 0.08, a * Math.PI / 3); }
+  for (const z of [-0.35, 0.35]) b.cylX(MAT.steel, -4.3, 4.65, z, 0.07, 0.5);
+  for (const x of [-1.3, -6.2, -13.0, -18.0]) for (const z of [-1.25, 1.25]) b.box(org, x, 1.0, z, 0.45, 0.35, 0.3);
+  // headlights: twin on the nose and on the radiator end; number boards; marker lights
+  b.box(MAT.darkMetal, -0.75, 3.5, 0, 0.32, 0.32, 0.75);
+  for (const z of [-0.18, 0.18]) b.add(new THREE.CircleGeometry(0.11, 16), MAT.headlight, M(-0.58, 3.5, z, 0, Math.PI / 2, 0));
+  b.box(MAT.darkMetal, -18.6, 3.85, 0, 0.12, 0.3, 0.75);
+  for (const z of [-0.18, 0.18]) b.add(new THREE.CircleGeometry(0.11, 16), MAT.headlight, M(-18.67, 3.85, z, 0, -Math.PI / 2, 0));
+  for (const [x, s] of [[-0.54, 1], [-18.56, -1]]) {
+    for (const z of [-1.0, 1.0]) { b.box(MAT.markerW, x, 1.95, z, 0.04, 0.14, 0.2); b.box(redLens, x, 1.75, z, 0.04, 0.12, 0.16); }
+  }
+  // walkway railings (clear of the cab) and across the ends
+  for (const z of [-1.46, 1.46]) { railing(b, rail, -0.5, -2.85, z, 1.46); railing(b, rail, -5.85, -19.0, z, 1.46); }
+  for (const x of [-0.45, -19.05]) for (const z of [-0.95, 0.95]) b.box(rail, x, 2.46, z, 0.05, 0.05, 0.9);
+  // fuel tank, air reservoirs, bogies, ends
+  b.add(hoodGeo(5.6, 2.3, 0.75, 0.3), std(0x2e3134, { metalness: 0.4 }), M(-6.8, 0.48, 0));
+  for (const z of [-0.85, 0.85]) b.cylX(std(0x4a4f53, { metalness: 0.5 }), -9.6, 0.42, z, 0.17, 4.6);
+  bogie(b, -3.7, 3, 1.75, 0.55); bogie(b, -15.5, 3, 1.75, 0.55);
   locoEnd(b, -0.5, 1); locoEnd(b, -19.2, -1);
-  for (const [hx, y, s] of [[-0.69, 3.4, 1], [-18.6, 3.75, -1]]) {
-    b.box(MAT.darkMetal, hx, y, 0, 0.12, 0.32, 0.7);
-    for (const z of [-0.17, 0.17]) b.add(new THREE.CircleGeometry(0.12, 16), MAT.headlight, M(hx + s * 0.07, y, z, 0, s * Math.PI / 2, 0));
-    for (const z of [-1.0, 1.0]) b.box(MAT.markerW, hx + s * 0.05, 1.95, z, 0.04, 0.14, 0.2);
-  }
   g.add(b.build());
-  const spr = new THREE.Sprite(headGlowMat); spr.name = 'headGlow'; spr.position.set(-0.5, 3.4, 0); spr.scale.setScalar(2.5); g.add(spr);
+  const plate = new THREE.MeshStandardMaterial({ map: signTex(256, 64, '#8a1e18', [{ text: 'WDM-3A  ' + (14000 + Math.floor(rand() * 999)), font: 'bold 32px Arial', color: '#ffe9a8', y: 0.55 }], '#ffe9a8') });
+  for (const z of [-1.5, 1.5]) { const m = new THREE.Mesh(new THREE.PlaneGeometry(1.15, 0.29), plate); m.position.set(-4.35, 1.95, z * 1.002); if (z < 0) m.rotation.y = Math.PI; g.add(m); }
+  const spr = new THREE.Sprite(headGlowMat); spr.name = 'headGlow'; spr.position.set(-0.45, 3.5, 0); spr.scale.setScalar(2.5); g.add(spr);
   const pool = new THREE.Mesh(poolGeo, poolMat); pool.position.set(22.5, 0.03, 0); pool.rotation.x = -Math.PI / 2; g.add(pool);
-  g.userData = { len: 19.7, rear: -19.2, loco: true, stack: [-8.6, 4.5, 0] };
+  g.userData = { len: 19.7, rear: -19.2, loco: true, stack: [-8.4, 4.3, 0] };
   return g;
 }
 const PROTO = {
@@ -2615,7 +2634,7 @@ const zMap = z => z >= -36 ? z : -36 + (z + 36) * 0.25;   // squeeze the running
 const PY = z => 26 + (zMap(z) + 46) / 102 * (PH - 40);
 function sizePanel() { const r = pc.getBoundingClientRect(); if (!r.width) return; PW = r.width; PH = r.height; pc.width = PW * devicePixelRatio; pc.height = PH * devicePixelRatio; }
 new ResizeObserver(sizePanel).observe(pc);
-function sigPos(s) { return [PX(s.x), PY(s.track) + (s.dir > 0 ? -9 : 9)]; }
+function sigPos(s) { return [PX(s.x), PY(s.track) + (s.dir > 0 ? -6 : 6)]; }
 function ptPos(c) { const xm = (c.x1 + c.x2) / 2; return [PX(xm), PY((c.z1 + c.z2) / 2)]; }
 function strokeFn(g, x0, x1, zf, n = 24) { g.beginPath(); for (let i = 0; i <= n; i++) { const x = x0 + (x1 - x0) * i / n, X = PX(x), Y = PY(zf(x)); i ? g.lineTo(X, Y) : g.moveTo(X, Y); } g.stroke(); }
 function drawPanel() {
@@ -2699,17 +2718,17 @@ function drawPanel() {
   for (const s of signals) {
     const [x, y] = sigPos(s); if (x < -10 || x > PW + 10) continue;
     const col = s.kind === 'shunt' ? (s.aspect ? '#ffffff' : '#ff2a1a') : ['#ff2a1a', '#ffd21a', '#27e05a'][s.aspect];
-    g.fillStyle = col; g.shadowColor = col; g.shadowBlur = 8;
-    if (s.kind === 'shunt') { g.fillRect(x - 4, y - 4, 8, 8); g.shadowBlur = 0; g.strokeStyle = 'rgba(0,0,0,0.6)'; g.lineWidth = 1; g.strokeRect(x - 4, y - 4, 8, 8); }
-    else { g.beginPath(); g.arc(x, y, s.kind === 'home' ? 6 : 5, 0, Math.PI * 2); g.fill(); g.shadowBlur = 0; }
-    if (hover && hover.sig === s) { g.strokeStyle = '#fff'; g.lineWidth = 2; g.beginPath(); g.arc(x, y, 9, 0, Math.PI * 2); g.stroke(); }
-    g.fillStyle = '#eaf5ee'; g.font = '600 9px Segoe UI'; g.textAlign = s.dir > 0 ? 'right' : 'left';
-    g.fillText(s.id + (s.kind === 'home' && s.routeLine ? `→${s.routeLine}` : ''), x + (s.dir > 0 ? -8 : 8), y + 3);
+    g.fillStyle = col; g.shadowColor = col; g.shadowBlur = 4;
+    if (s.kind === 'shunt') { g.fillRect(x - 2.5, y - 2.5, 5, 5); g.shadowBlur = 0; }
+    else { g.beginPath(); g.arc(x, y, s.kind === 'home' ? 3.6 : 3, 0, Math.PI * 2); g.fill(); g.shadowBlur = 0; }
+    if (hover && hover.sig === s) { g.strokeStyle = '#fff'; g.lineWidth = 1.5; g.beginPath(); g.arc(x, y, 6, 0, Math.PI * 2); g.stroke(); }
+    g.fillStyle = '#eaf5ee'; g.font = '600 8px Segoe UI'; g.textAlign = s.dir > 0 ? 'right' : 'left';
+    g.fillText(s.id + (s.kind === 'home' && s.routeLine ? `→${s.routeLine}` : ''), x + (s.dir > 0 ? -5 : 5), y + 3);
   }
 }
 function panelHit(e) {
   const r = pc.getBoundingClientRect(), mx = e.clientX - r.left, my = e.clientY - r.top;
-  const sig = signals.find(s => { const [x, y] = sigPos(s); return Math.hypot(mx - x, my - y) < 8; });
+  const sig = signals.find(s => { const [x, y] = sigPos(s); return Math.hypot(mx - x, my - y) < 6; });
   if (sig) return { sig };
   // a train under the pointer (its drawn body line)
   let tb = null, td = 7;
