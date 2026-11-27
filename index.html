@@ -40,7 +40,6 @@ html,body{margin:0;height:100%;overflow:hidden;background:#000;font-family:'Sego
 .tinfo{font-size:11px;color:var(--mut);margin-top:2px}
 .tstat{font-size:12px;margin-top:4px}
 .tstat.warn{color:#ff8a65}.tstat.ok{color:#81e48a}.tstat.info{color:#ffd54f}
-#logwrap{flex:1;min-height:110px;display:flex;flex-direction:column;overflow:hidden}
 #log{flex:1;overflow:auto;padding:0 12px 10px;font-size:12px;line-height:1.45}
 #log div{border-bottom:1px dashed rgba(255,255,255,0.06);padding:3px 0}
 #log .t{color:var(--mut);margin-right:6px;font-variant-numeric:tabular-nums}
@@ -72,9 +71,10 @@ html,body{margin:0;height:100%;overflow:hidden;background:#000;font-family:'Sego
 .winhead input[type=range]{width:80px}
 #panelwrap{left:16px;bottom:16px;top:auto;width:min(1000px,calc(100vw - 420px));height:330px}
 #panel{flex:1;width:100%;height:auto;min-height:0;display:block;border-radius:0;touch-action:none}
-#side{top:64px;right:16px;bottom:auto;width:370px;height:62vh;gap:0}
+#side{top:64px;right:16px;bottom:auto;width:370px;height:52vh;gap:0}
+#diary{top:calc(64px + 52vh + 10px);right:16px;bottom:auto;width:370px;height:calc(100vh - 52vh - 92px);min-height:110px}
+#diary #log{padding-top:6px}
 #trains{max-height:none;flex:1;overflow:auto;padding:6px 8px;min-height:0}
-#logwrap{flex:0 0 30%;min-height:60px;border-top:1px solid rgba(255,255,255,0.1)}
 .btn.sm{font-size:11px;padding:3px 7px;background:rgba(255,255,255,0.08)}
 .btn.sigb.off{background:#1f6b35}
 .tctl{display:flex;gap:4px;margin-top:6px;flex-wrap:wrap}
@@ -144,7 +144,11 @@ html,body{margin:0;height:100%;overflow:hidden;background:#000;font-family:'Sego
 <div id="side" class="hud win hidden">
   <div class="winhead"><b>Trains</b><span class="hint">click a train to view it · set its signal and points here · drag to move</span><input type="range" class="opac" min="15" max="95" value="72" title="Transparency"></div>
   <div id="trains"><div class="empty">No trains yet…</div></div>
-  <div id="logwrap"><h3>Station diary</h3><div id="log"></div></div>
+</div>
+
+<div id="diary" class="hud win hidden">
+  <div class="winhead"><b>Station diary</b><span class="hint">announcements, orders and events · drag to move</span><input type="range" class="opac" min="15" max="95" value="72" title="Transparency"></div>
+  <div id="log"></div>
 </div>
 
 <div id="panelwrap" class="hud win hidden">
@@ -1313,49 +1317,88 @@ function buffers(b, xFace, s) {
   b.box(MAT.darkMetal, xFace + s * 0.25, 1.05, 0, 0.5, 0.25, 0.3);
 }
 
+// ---------- shared loco parts ----------
+// rounded-top hood / roof section, extruded along -x from its front end (x = 0 .. -len)
+function hoodGeo(len, w, h, r) {
+  const s = new THREE.Shape();
+  s.moveTo(-w / 2, 0); s.lineTo(w / 2, 0); s.lineTo(w / 2, h - r); s.quadraticCurveTo(w / 2, h, w / 2 - r, h);
+  s.lineTo(-w / 2 + r, h); s.quadraticCurveTo(-w / 2, h, -w / 2, h - r); s.closePath();
+  const g = new THREE.ExtrudeGeometry(s, { depth: len, bevelEnabled: false, curveSegments: 5 });
+  g.rotateY(-Math.PI / 2); return g;
+}
+// walkway railing: stanchions + top and middle rail
+function railing(b, mat, x0, x1, z, y0) {
+  b.box(mat, (x0 + x1) / 2, y0 + 1.0, z, Math.abs(x1 - x0), 0.05, 0.05);
+  b.box(mat, (x0 + x1) / 2, y0 + 0.55, z, Math.abs(x1 - x0), 0.04, 0.04);
+  const n = Math.max(1, Math.round(Math.abs(x1 - x0) / 1.4));
+  for (let i = 0; i <= n; i++) b.box(mat, x0 + (x1 - x0) * i / n, y0 + 0.5, z, 0.05, 1.0, 0.05);
+}
+// buffer beam with yellow/black hazard stripes, side buffers, centre buffer coupler (CBC) and a pilot plate
+const hazY = std(0xf2c21b), hazK = std(0x151515);
+const redLens = std(0x7a1010, { roughness: 0.3 });   // unlit red marker lenses
+function locoEnd(b, xFace, s, wide = 2.9) {
+  b.box(MAT.darkMetal, xFace - s * 0.15, 1.05, 0, 0.3, 0.55, wide);
+  for (let i = 0; i < 7; i++) b.box(i % 2 ? hazK : hazY, xFace + s * 0.005, 1.05, -wide / 2 + wide * (i + 0.5) / 7, 0.02, 0.5, wide / 7);
+  buffers(b, xFace, s);
+  b.box(MAT.darkMetal, xFace + s * 0.28, 1.0, 0, 0.55, 0.22, 0.26);                 // CBC shank
+  b.box(MAT.darkMetal, xFace + s * 0.58, 1.0, 0, 0.16, 0.42, 0.42);                 // knuckle head
+  b.beam(MAT.darkMetal, V(xFace - s * 0.05, 0.78, 0), V(xFace + s * 0.42, 0.28, 0), 0.08, 2.5);   // pilot / cattle guard
+  for (const z of [-1.0, 1.0]) { b.box(MAT.darkMetal, xFace - s * 0.1, 0.62, z * 1.25, 0.25, 0.04, 0.4); b.box(MAT.darkMetal, xFace - s * 0.1, 0.32, z * 1.25, 0.25, 0.04, 0.4); }  // steps
+}
+
+// WAP-7 / WAG-9 style electric: full-width body with raked cab ends, roof cap, roof equipment
 function buildLocoProto(liv) {
   const g = new THREE.Group(), b = new Builder();
   const tex = locoTextures(liv.base, liv.stripe, liv.num);
-  const sideM = new THREE.MeshStandardMaterial({ map: tex.side, roughness: 0.42, metalness: 0.25 });
-  const frontM = new THREE.MeshStandardMaterial({ map: tex.front, roughness: 0.42, metalness: 0.25 });
-  const baseM = std(liv.base, { roughness: 0.42, metalness: 0.25 });
-  const body = new THREE.Mesh(new THREE.BoxGeometry(19, 2.9, 3.1), [frontM, frontM, baseM, MAT.darkMetal, sideM, sideM]);
+  const sideM = new THREE.MeshStandardMaterial({ map: tex.side, roughness: 0.38, metalness: 0.25 });
+  const frontM = new THREE.MeshStandardMaterial({ map: tex.front, roughness: 0.3, metalness: 0.25 });
+  const baseM = std(liv.base, { roughness: 0.38, metalness: 0.25 });
+  // body: the upper half of each end is raked back 0.65 m (cab windscreens)
+  const bg = new THREE.BoxGeometry(19, 2.9, 3.1, 1, 2, 1).toNonIndexed(), pa = bg.attributes.position;
+  for (let i = 0; i < pa.count; i++) if (pa.getY(i) > 1.4 && Math.abs(pa.getX(i)) > 9.4) pa.setX(i, Math.sign(pa.getX(i)) * 8.85);
+  bg.computeVertexNormals();
+  const body = new THREE.Mesh(bg, [frontM, frontM, baseM, MAT.darkMetal, sideM, sideM]);
   body.position.set(-10, 2.85, 0); body.castShadow = body.receiveShadow = true; g.add(body);
   const roofM = std(0x8b9196, { metalness: 0.45, roughness: 0.45 });
-  b.box(roofM, -10, 4.36, 0, 18.4, 0.14, 2.8);
-  b.box(baseM, -0.64, 4.24, 0, 0.36, 0.16, 3.1); b.box(baseM, -19.36, 4.24, 0, 0.36, 0.16, 3.1);
-  for (const x of [-7, -10, -13]) b.box(roofM, x, 4.48, 0, 2.2, 0.1, 2.3);
+  b.add(hoodGeo(17.7, 3.1, 0.34, 0.3), roofM, M(-1.15, 4.28, 0));                       // rounded roof cap
+  for (const x of [-7, -10, -13]) b.box(MAT.darkMetal, x, 4.66, 0, 2.2, 0.06, 2.0);       // roof hatches
+  for (const z of [-1.0, 1.0]) b.box(roofM, -10, 4.66, z, 11, 0.05, 0.08);               // roof walkway edges
+  // cab ends: sun visor, wipers, twin headlight pod, horns, marker lights
+  for (const s of [1, -1]) {
+    const xf = s > 0 ? -0.5 : -19.5, xr = s > 0 ? -1.15 : -18.85;                         // face bottom / top
+    b.box(baseM, xr + s * 0.12, 4.36, 0, 0.3, 0.06, 2.9);                                 // visor
+    for (const z of [-0.65, 0.65]) b.beam(MAT.black, V(xf + s * 0.1, 3.05, z - 0.2), V(xr + s * 0.25, 3.85, z + 0.15), 0.03, 0.03);
+    b.box(MAT.darkMetal, xr - s * 0.2, 4.6, 0, 0.5, 0.3, 0.8);                            // headlight pod on the roof
+    for (const z of [-0.18, 0.18]) b.add(new THREE.CircleGeometry(0.11, 16), MAT.headlight, M(xr + s * 0.06, 4.6, z, 0, s * Math.PI / 2, 0));
+    for (const z of [-0.35, 0.35]) b.cylX(MAT.steel, xr - s * 0.7, 4.62, z, 0.07, 0.5);   // horns
+    for (const z of [-1.15, 1.15]) {
+      b.box(MAT.markerW, xf + s * 0.02, 1.85, z, 0.04, 0.16, 0.22);
+      b.box(redLens, xf + s * 0.02, 1.62, z, 0.04, 0.12, 0.16);
+    }
+    for (const z of [-1.58, 1.58]) b.box(MAT.yellow, xf - s * 1.1, 2.6, z, 0.04, 1.4, 0.04);   // cab door grab rails
+    locoEnd(b, xf, s);
+  }
   // pantographs (rear one raised)
   for (const [px, up] of [[-3.6, false], [-16.4, true]]) {
-    b.box(MAT.darkMetal, px, 4.52, 0, 1.8, 0.1, 1.5);
-    for (const sx of [-0.7, 0.7]) for (const sz of [-0.6, 0.6]) b.cyl(MAT.insulator, px + sx, 4.64, sz, 0.07, 0.24);
-    const headY = up ? 5.46 : 4.82, kneeX = up ? px - 1.15 : px - 1.6, kneeY = up ? 5.05 : 4.74;
+    b.box(MAT.darkMetal, px, 4.7, 0, 1.8, 0.1, 1.5);
+    for (const sx of [-0.7, 0.7]) for (const sz of [-0.6, 0.6]) b.cyl(MAT.insulator, px + sx, 4.6, sz, 0.07, 0.24);
+    const by = 4.75, headY = up ? 5.62 : 4.98, kneeX = up ? px - 1.15 : px - 1.6, kneeY = up ? 5.2 : 4.9;
     for (const sz of [-0.42, 0.42]) {
-      b.beam(MAT.darkMetal, V(px + 0.7, 4.72, sz), V(kneeX, kneeY, sz), 0.06, 0.06);
+      b.beam(MAT.darkMetal, V(px + 0.7, by, sz), V(kneeX, kneeY, sz), 0.06, 0.06);
       b.beam(MAT.darkMetal, V(kneeX, kneeY, sz), V(px + 0.2, headY, sz * 0.4), 0.05, 0.05);
     }
     b.box(MAT.steel, px + 0.2, headY, 0, 0.28, 0.06, 1.9);
   }
-  b.beam(MAT.steel, V(-4.4, 4.85, 0), V(-15.6, 4.85, 0), 0.06, 0.06);
-  for (const x of [-6, -10, -14]) b.cyl(MAT.insulator, x, 4.66, 0, 0.06, 0.38);
-  b.cylX(MAT.darkMetal, -1.6, 4.55, 0.9, 0.06, 0.6); b.cylX(MAT.darkMetal, -1.6, 4.55, -0.9, 0.06, 0.6);
-  // headlights & markers
-  for (const [hx, s] of [[-0.42, 1], [-19.58, -1]]) {
-    b.box(MAT.darkMetal, hx, 4.06, 0, 0.3, 0.34, 0.72);
-    for (const z of [-0.17, 0.17]) b.add(new THREE.CircleGeometry(0.12, 16), MAT.headlight, M(hx + s * 0.16, 4.06, z, 0, s * Math.PI / 2, 0));
-    for (const z of [-1.2, 1.2]) b.box(MAT.markerW, hx - s * 0.06 + s * 0.02, 1.85, z, 0.04, 0.14, 0.2);
-  }
-  // handrails
-  for (const z of [-1.58, 1.58]) for (const x of [-1.6, -18.4]) b.box(MAT.yellow, x, 2.6, z, 0.04, 1.4, 0.04);
-  // underframe
-  b.box(MAT.darkMetal, -10, 1.15, 0, 18.6, 0.5, 2.85);
-  b.box(MAT.darkMetal, -10, 0.82, 0, 5.2, 0.7, 2.2);
-  for (const z of [-1.25, 1.25]) { b.box(std(0x45494e), -7.2, 0.95, z, 1.4, 0.5, 0.3); b.box(std(0x45494e), -12.8, 0.95, z, 1.4, 0.5, 0.3); }
+  b.beam(MAT.steel, V(-4.4, 5.0, 0), V(-15.6, 5.0, 0), 0.06, 0.06);
+  for (const x of [-6, -10, -14]) b.cyl(MAT.insulator, x, 4.82, 0, 0.06, 0.38);
+  // underframe: transformer tank, air reservoirs, sand boxes
+  b.box(MAT.darkMetal, -10, 1.2, 0, 18.6, 0.4, 2.95);
+  b.box(std(0x2e3134, { metalness: 0.4 }), -10, 0.82, 0, 5.6, 0.75, 2.3);
+  for (const z of [-0.75, 0.75]) b.cylX(std(0x4a4f53, { metalness: 0.5 }), -10, 0.72, z, 0.22, 4.6);
+  for (const x of [-2.6, -6.6, -13.4, -17.4]) for (const z of [-1.2, 1.2]) b.box(baseM, x, 1.0, z, 0.5, 0.35, 0.35);
   bogie(b, -4.6, 3, 1.8, 0.55); bogie(b, -15.4, 3, 1.8, 0.55);
-  for (const [px, s] of [[-0.55, 1], [-19.45, -1]]) b.beam(MAT.darkMetal, V(px, 0.85, 0), V(px + s * 0.35, 0.25, 0), 0.25, 2.7);
-  buffers(b, -0.5, 1); buffers(b, -19.5, -1);
   g.add(b.build());
-  const spr = new THREE.Sprite(headGlowMat); spr.name = 'headGlow'; spr.position.set(-0.1, 4.06, 0); spr.scale.setScalar(2.5); g.add(spr);
+  const spr = new THREE.Sprite(headGlowMat); spr.name = 'headGlow'; spr.position.set(-0.9, 4.6, 0); spr.scale.setScalar(2.5); g.add(spr);
   const pool = new THREE.Mesh(poolGeo, poolMat); pool.position.set(22.5, 0.03, 0); pool.rotation.x = -Math.PI / 2; g.add(pool);
   g.userData = { len: 20, rear: -19.5, loco: true };
   return g;
@@ -1491,30 +1534,60 @@ function buildWagonProto() {
   return g;
 }
 
-// WDS-6 diesel yard shunter: long hood + end cab, yellow/maroon livery
+// WDS-6 diesel yard shunter: short hood, cab, rounded long hood, walkway railings, yellow with maroon bands
 function buildShunterProto() {
   const g = new THREE.Group(), b = new Builder();
-  const yel = std(0xf2b705, { roughness: 0.5, metalness: 0.2 }), mar = std(0x7b2a24, { roughness: 0.5 }), grey = std(0x6b7075);
-  b.box(MAT.darkMetal, -7, 1.15, 0, 13.6, 0.45, 2.9);                    // underframe
-  b.box(yel, -8.4, 2.45, 0, 9.6, 2.2, 2.3);                              // long hood
-  b.box(mar, -8.4, 1.55, 0, 9.62, 0.25, 2.32);
-  for (let x = -4.4; x > -12.8; x -= 1.4) for (const z of [-1.16, 1.16]) b.box(grey, x, 2.6, z, 0.9, 1.2, 0.03);
-  b.box(yel, -1.9, 2.95, 0, 3.0, 3.2, 2.9);                              // cab
-  b.box(mar, -1.9, 4.6, 0, 3.2, 0.18, 3.0);
-  for (const z of [-1.46, 1.46]) b.box(MAT.glass, -1.9, 3.6, z, 2.2, 0.9, 0.03);
-  b.box(MAT.glass, -0.39, 3.6, 0, 0.03, 0.9, 2.3); b.box(MAT.glass, -3.41, 3.6, 0, 0.03, 0.9, 2.3);
-  b.cyl(MAT.black, -9, 3.85, 0, 0.18, 0.6);                              // exhaust stack
-  b.box(yel, -13.5, 2.0, 0, 0.6, 1.3, 2.3);                              // short hood end
-  for (const [hx, s] of [[-0.35, 1], [-13.85, -1]]) {
-    for (const z of [-0.5, 0.5]) b.add(new THREE.CircleGeometry(0.14, 14), MAT.headlight, M(hx + s * 0.02, hx > -1 ? 4.2 : 2.35, z, 0, s * Math.PI / 2, 0));
-    for (let i = 0; i < 5; i++) b.box(i % 2 ? MAT.black : yel, hx, 1.15, -1.2 + i * 0.6, 0.06, 0.45, 0.6);   // wasp stripes
+  const yel = std(0xf0b20a, { roughness: 0.45, metalness: 0.2 }), mar = std(0x7b2a24, { roughness: 0.5 }), grille = std(0x343638, { metalness: 0.4, roughness: 0.6 });
+  const walk = std(0x55585b, { metalness: 0.4, roughness: 0.7 }), rail = std(0xf4f1e6, { roughness: 0.5 });
+  // underframe + walkway
+  b.box(MAT.darkMetal, -7.15, 1.12, 0, 13.4, 0.42, 2.85);
+  b.box(walk, -7.15, 1.36, 0, 13.6, 0.06, 3.0);
+  b.box(mar, -7.15, 1.2, 1.47, 13.4, 0.2, 0.03); b.box(mar, -7.15, 1.2, -1.47, 13.4, 0.2, 0.03);
+  // short hood (front), cab, long hood
+  b.add(hoodGeo(1.2, 2.1, 1.6, 0.3), yel, M(-0.55, 1.39, 0));
+  b.box(yel, -3.15, 2.72, 0, 2.8, 2.66, 2.9);                                          // cab
+  b.add(hoodGeo(3.2, 3.2, 0.28, 0.22), mar, M(-1.55, 4.05, 0));                          // cab roof, overhanging
+  b.add(hoodGeo(8.5, 2.2, 2.2, 0.38), yel, M(-4.55, 1.39, 0));                           // long hood
+  for (const z of [-1.11, 1.11]) {
+    b.box(mar, -8.8, 1.75, z, 8.5, 0.22, 0.02);                                         // maroon band
+    for (let x = -5.3; x > -12.6; x -= 1.2) { b.box(grille, x, 2.75, z * 1.003, 0.85, 0.85, 0.02); b.box(MAT.darkMetal, x, 2.05, z * 1.003, 0.9, 0.02, 0.02); }   // louvres + door lines
   }
-  for (const z of [-1.5, 1.5]) b.box(MAT.yellow, -7, 1.75, z, 12.5, 0.05, 0.05);
-  bogie(b, -3.4, 3, 1.5, 0.5); bogie(b, -10.6, 3, 1.5, 0.5);
-  buffers(b, -0.4, 1); buffers(b, -13.9, -1);
+  // cab windows: framed glass front/rear, sliding side windows, doors
+  const frame = MAT.black;
+  for (const x of [-1.74, -4.56]) for (const z of [-0.7, 0.7]) {
+    b.box(frame, x, 3.42, z, 0.04, 0.95, 1.05); b.box(MAT.glass, x + (x > -3 ? 0.01 : -0.01), 3.42, z, 0.03, 0.82, 0.92);
+  }
+  for (const z of [-1.46, 1.46]) {
+    b.box(frame, -2.7, 3.42, z, 1.4, 0.9, 0.04); b.box(MAT.glass, -2.7, 3.42, z * 1.002, 1.28, 0.78, 0.03);
+    b.box(MAT.darkMetal, -3.9, 2.55, z * 1.002, 0.75, 1.9, 0.02);                       // door outline
+    b.box(rail, -4.35, 2.6, z * 1.02, 0.04, 1.3, 0.04);                                 // grab rail
+  }
+  b.box(yel, -1.62, 4.0, 0, 0.35, 0.05, 2.4);                                            // sun visor
+  // exhaust stack with spark arrester, radiator fans, horns
+  b.cyl(MAT.black, -6.2, 3.78, 0, 0.2, 0.5); b.cyl(MAT.black, -6.2, 4.06, 0, 0.27, 0.1);
+  for (const x of [-11.2, -12.3]) { b.cyl(grille, x, 3.6, 0, 0.5, 0.05); b.cyl(MAT.black, x, 3.62, 0, 0.42, 0.04); }
+  for (const z of [-0.3, 0.3]) b.cylX(MAT.steel, -2.3, 4.42, z, 0.06, 0.45);
+  // headlights: cab roof (front) and long-hood end (rear); marker lights
+  b.box(MAT.darkMetal, -1.75, 4.36, 0, 0.3, 0.3, 0.7);
+  for (const z of [-0.16, 0.16]) b.add(new THREE.CircleGeometry(0.1, 14), MAT.headlight, M(-1.59, 4.36, z, 0, Math.PI / 2, 0));
+  b.box(MAT.darkMetal, -13.02, 3.3, 0, 0.12, 0.3, 0.7);
+  for (const z of [-0.16, 0.16]) b.add(new THREE.CircleGeometry(0.1, 14), MAT.headlight, M(-13.09, 3.3, z, 0, -Math.PI / 2, 0));
+  for (const z of [-1.0, 1.0]) { b.box(MAT.markerW, -0.42, 1.75, z, 0.04, 0.14, 0.2); b.box(MAT.markerW, -13.88, 1.75, z, 0.04, 0.14, 0.2); }
+  // walkway railings along both sides (clear of the cab) and across the ends
+  for (const z of [-1.44, 1.44]) { railing(b, rail, -0.5, -1.65, z, 1.39); railing(b, rail, -4.65, -13.8, z, 1.39); }
+  railing(b, rail, -13.85, -13.85, 0, 1.39);
+  for (const z of [-0.9, 0.9]) { b.box(rail, -0.45, 2.39, z, 0.05, 0.05, 0.9); b.box(rail, -13.85, 2.39, z, 0.05, 0.05, 0.9); }
+  // fuel tank, air reservoirs, bogies, ends
+  b.box(std(0x2e3134, { metalness: 0.4 }), -7.2, 0.82, 0, 4.2, 0.6, 2.2);
+  for (const z of [-0.85, 0.85]) b.cylX(std(0x4a4f53, { metalness: 0.5 }), -7.2, 0.6, z, 0.18, 3.6);
+  bogie(b, -3.2, 3, 1.5, 0.5); bogie(b, -11.1, 3, 1.5, 0.5);
+  locoEnd(b, -0.4, 1); locoEnd(b, -13.9, -1);
   g.add(b.build());
-  const spr = new THREE.Sprite(headGlowMat); spr.name = 'headGlow'; spr.position.set(-0.1, 4.2, 0); spr.scale.setScalar(2); g.add(spr);
-  g.userData = { len: 14.3, rear: -13.9, loco: true, stack: [-9, 4.2, 0] };
+  // number plates on the cab sides
+  const plate = new THREE.MeshStandardMaterial({ map: signTex(256, 64, '#7b2a24', [{ text: 'WDS-6  ' + (36000 + Math.floor(rand() * 999)), font: 'bold 34px Arial', color: '#ffe9a8', y: 0.55 }], '#ffe9a8') });
+  for (const z of [-1.5, 1.5]) { const m = new THREE.Mesh(new THREE.PlaneGeometry(1.1, 0.28), plate); m.position.set(-3.15, 2.25, z); if (z < 0) m.rotation.y = Math.PI; g.add(m); }
+  const spr = new THREE.Sprite(headGlowMat); spr.name = 'headGlow'; spr.position.set(-1.5, 4.36, 0); spr.scale.setScalar(2); g.add(spr);
+  g.userData = { len: 14.3, rear: -13.9, loco: true, stack: [-6.2, 4.2, 0] };
   return g;
 }
 // WDM-3A / WDP style diesel: short hood, cab, long hood with louvres, orange + cream livery, exhaust stack
@@ -1544,14 +1617,12 @@ function buildDieselProto() {
   // fuel tank, bogies, buffers, lights
   b.box(std(0x2e3134, { metalness: 0.4 }), -9.6, 0.85, 0, 5.4, 0.75, 2.3);
   bogie(b, -3.6, 3, 1.75, 0.55); bogie(b, -15.6, 3, 1.75, 0.55);
-  buffers(b, -0.5, 1); buffers(b, -19.2, -1);
+  locoEnd(b, -0.5, 1); locoEnd(b, -19.2, -1);
   for (const [hx, y, s] of [[-0.69, 3.4, 1], [-18.6, 3.75, -1]]) {
     b.box(MAT.darkMetal, hx, y, 0, 0.12, 0.32, 0.7);
     for (const z of [-0.17, 0.17]) b.add(new THREE.CircleGeometry(0.12, 16), MAT.headlight, M(hx + s * 0.07, y, z, 0, s * Math.PI / 2, 0));
     for (const z of [-1.0, 1.0]) b.box(MAT.markerW, hx + s * 0.05, 1.95, z, 0.04, 0.14, 0.2);
   }
-  // cowcatcher-style pilot plates in red/cream stripes
-  for (const [x, s] of [[-0.62, 1], [-19.08, -1]]) for (let i = 0; i < 5; i++) b.box(i % 2 ? red : crm, x, 0.75, -1.2 + i * 0.6, 0.08, 0.45, 0.6);
   g.add(b.build());
   const spr = new THREE.Sprite(headGlowMat); spr.name = 'headGlow'; spr.position.set(-0.5, 3.4, 0); spr.scale.setScalar(2.5); g.add(spr);
   const pool = new THREE.Mesh(poolGeo, poolMat); pool.position.set(22.5, 0.03, 0); pool.rotation.x = -Math.PI / 2; g.add(pool);
@@ -2285,7 +2356,7 @@ function renderTrainList() {
   for (const [t, el] of cards) if (!trains.includes(t)) { el.remove(); cards.delete(t); }
   if (!trains.length) { if (!box.querySelector('.empty')) box.innerHTML = '<div class="empty">No trains in section. Next one is on its way…</div>'; return; }
   box.querySelector('.empty')?.remove();
-  const order = [...trains].sort((a, b) => ((b === selected) - (a === selected)) || (a.stabled - b.stabled) || (a.isEngine - b.isEngine));
+  const order = [...trains].sort((a, b) => (a.stabled - b.stabled) || (a.isEngine - b.isEngine));   // selecting a train never moves its card
   order.forEach((t, i) => {
     const el = cardFor(t);
     if (box.children[i] !== el) box.insertBefore(el, box.children[i] || null);
@@ -2395,7 +2466,7 @@ function makeWindow(el) {
   const op = el.querySelector('.opac');
   if (op) { const f = () => el.style.setProperty('--a', op.value / 100); op.addEventListener('input', f); f(); }
 }
-makeWindow($('panelwrap')); makeWindow($('side'));
+makeWindow($('panelwrap')); makeWindow($('side')); makeWindow($('diary'));
 
 // --- route relay panel (canvas): zoom / pan, transparent ---
 const pc = $('panel'), pctx = pc.getContext('2d');
@@ -2596,7 +2667,7 @@ $('sSave').addEventListener('click', () => {
 $('startBtn').addEventListener('click', () => {
   initAudio();
   $('intro').classList.add('hidden');
-  for (const id of ['topbar', 'views', 'side', 'panelwrap']) $(id).classList.remove('hidden');
+  for (const id of ['topbar', 'views', 'side', 'diary', 'panelwrap']) $(id).classList.remove('hidden');
   sizePanel();
   controls.autoRotate = false; state.running = true;
   log(`Duty taken over at ${SN.short} (${SN.code}). All signals ON. · ड्यूटी शुरू — सभी सिगनल ऑन।`, 'good');
@@ -2607,7 +2678,7 @@ let hudHidden = false;
 addEventListener('keydown', e => {
   if (!state.running) return;
   if (e.target.closest && e.target.closest('input,select,textarea')) return;
-  if (e.key === 'h' || e.key === 'H') { hudHidden = !hudHidden; for (const id of ['topbar', 'views', 'side', 'panelwrap']) $(id).style.display = hudHidden ? 'none' : ''; }
+  if (e.key === 'h' || e.key === 'H') { hudHidden = !hudHidden; for (const id of ['topbar', 'views', 'side', 'diary', 'panelwrap']) $(id).style.display = hudHidden ? 'none' : ''; }
   if (e.key === ' ') { e.preventDefault(); document.querySelector(`#speedBtns .btn[data-speed="${state.speed ? 0 : 1}"]`).click(); }
 });
 addEventListener('resize', () => { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); sizePanel(); });
