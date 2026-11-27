@@ -108,6 +108,25 @@ html,body{margin:0;height:100%;overflow:hidden;background:#000;font-family:'Sego
 .pfl{display:inline-flex;align-items:center;margin-left:auto}
 .pfsel{font:inherit;font-size:11px;background:#1b232b;color:#fff;border:1px solid rgba(255,255,255,0.25);border-radius:5px;padding:2px 4px}
 .pfsel:disabled{opacity:.6}
+/* ---------- phones and small screens: compact top bar, one bottom sheet with tabs, bigger touch targets ---------- */
+#mtabs{display:none}
+@media (max-width: 760px), (max-height: 500px) {
+  #topbar{height:auto;flex-wrap:wrap;gap:5px;padding:4px max(8px, env(safe-area-inset-left, 0px)) 5px max(8px, env(safe-area-inset-right, 0px))}
+  .brand span{display:none}.brand b{font-size:12px;letter-spacing:1px}
+  .stats{gap:4px;margin-left:0}.stat{min-width:0;padding:2px 6px}.stat small{font-size:8px;letter-spacing:.3px}.stat div{font-size:13px}
+  .spacer{display:none}.btns{padding:2px}.btn{padding:6px 8px;font-size:11.5px}
+  #views{top:calc(var(--tbh, 90px) + 4px);left:8px;right:8px;overflow-x:auto;flex-wrap:nowrap}
+  #toast{top:calc(var(--tbh, 90px) + 44px);max-width:92vw;font-size:12.5px;text-align:center}
+  .win{left:0!important;right:0!important;top:auto!important;bottom:calc(46px + env(safe-area-inset-bottom, 0px))!important;width:auto!important;height:44vh!important;min-width:0;min-height:0;resize:none;border-radius:12px 12px 0 0}
+  .win.mhide{display:none!important}
+  .winhead{cursor:default}.winhead .hint,.winhead input[type=range]{display:none}
+  #mtabs{display:flex;left:0;right:0;bottom:0;height:calc(46px + env(safe-area-inset-bottom, 0px));padding:4px max(6px, env(safe-area-inset-left, 0px)) env(safe-area-inset-bottom, 0px);gap:4px;background:rgba(8,12,16,0.94);border-top:1px solid var(--line);z-index:6}
+  #mtabs .btn{flex:1;font-size:13px}#mtabs .btn:last-child{flex:0 0 46px}
+  .btn.sm{font-size:12px;padding:6px 9px}.chip{font-size:12px;padding:5px 8px}.pfsel{font-size:12.5px;padding:4px 6px}.more{font-size:15px;padding:2px 6px}
+  #intro{align-items:flex-start;padding:max(18px, env(safe-area-inset-top, 0px)) 6vw 24px;overflow:auto;background:rgba(0,0,0,0.72)}
+  .introbox h1{font-size:30px}.introbox h2{font-size:15px}.introbox p{font-size:13px}.introbox ul{font-size:12px}
+  .setbox{width:92vw;max-height:90vh;overflow:auto}
+}
 </style>
 <script type="importmap">
 { "imports": {
@@ -162,10 +181,13 @@ html,body{margin:0;height:100%;overflow:hidden;background:#000;font-family:'Sego
 </div>
 
 <div id="panelwrap" class="hud win hidden">
-  <div class="winhead"><b>Panel</b><span class="hint">click a train = select · click signal = ON/OFF · click a crossover = throw point (green = set) · wheel = zoom · drag = pan · drag corner = resize · H = hide</span><button class="btn sm" id="pzStation">Station</button><button class="btn sm" id="pzFit">Fit all</button><input type="range" class="opac" min="10" max="95" value="45" title="Transparency"></div>
+  <div class="winhead"><b>Panel</b><span class="hint">click A–D at the edges = arrivals / departures only · click a train = select · click signal = ON/OFF · click a crossover = throw point (green = set) · wheel = zoom · drag = pan · drag corner = resize · H = hide</span><button class="btn sm" id="pzOut" title="Zoom out">−</button><button class="btn sm" id="pzIn" title="Zoom in">+</button><button class="btn sm" id="pzStation">Station</button><button class="btn sm" id="pzFit">Fit all</button><input type="range" class="opac" min="10" max="95" value="45" title="Transparency"></div>
   <canvas id="panel"></canvas>
 </div>
 
+<div id="mtabs" class="hud hidden">
+  <button class="btn on" data-tab="side">🚆 Trains</button><button class="btn" data-tab="panelwrap">🗺 Panel</button><button class="btn" data-tab="diary">📜 Diary</button><button class="btn" data-tab="">✕</button>
+</div>
 <div id="toast" class="hud"></div>
 <div id="settings" class="hidden"><div class="setbox">
   <h3>Settings</h3>
@@ -183,10 +205,12 @@ html,body{margin:0;height:100%;overflow:hidden;background:#000;font-family:'Sego
     <div class="tag">STATION MASTER 3D</div>
     <h1 id="introName">Chandanpur<br/>Junction</h1>
     <h2>You run the station. Every train waits for your signal.</h2>
-    <p>Trains arrive from both sides on five long tracks, <b>A to E</b>, and stop at their <b>Home signal</b> far from the station. The station has <b>5 platforms and 3 loop lines</b>, all joined by crossover ladders.</p>
-    <p>You set every route by hand: throw the <b>points</b> (◆ on the panel, or the chips on a train's card) so the path weaves around stabled rakes and waiting trains, then take the signal OFF. Trains follow the points exactly as they lie, curving smoothly from track to track. Wrong points mean run-throughs, wrong platforms or accidents.</p>
+    <p>Trains arrive from both sides on four main tracks, <b>A to D</b>, that run into the middle of the station. They stop at the <b>Outer</b> and <b>Home</b> signals until you clear a route. The station has <b>5 platforms and 3 loop lines</b>, a goods running line and a yard.</p>
+    <p>You set every route by hand: throw the <b>points</b> (tap a crossover on the panel, or the Route buttons on a train's card) so the path weaves around stabled rakes and waiting trains, then take the signal OFF. Trains follow the points exactly as they lie, curving smoothly from track to track. Wrong points mean run-throughs, wrong platforms or accidents.</p>
 <ul>
       <li>The dashed line on the panel shows where each train will go with the points as set</li>
+      <li><b>🛤 Route</b> on a train's card sets the whole route in one go (points + every signal) to the platform or line chosen on the card; <b>🛤 Depart</b> does the same for leaving; <b>✖</b> cancels</li>
+      <li>Tap A–D at the edges of the panel to keep a main track for arrivals only, departures only, or both</li>
       <li>Left-drag to rotate · Right-drag to pan · Scroll to zoom</li>
       <li>Use the camera buttons to sit in the SM cabin or ride in the loco cab</li>
     </ul>
@@ -2228,6 +2252,22 @@ class Train {
 // Locked points cannot be thrown. Once the train passes the signal, the route stays locked behind it and is
 // released section by section as the train's tail clears it.
 const routes = [];
+// main-track use, set separately for each side of the station: 'both', 'arr' (towards the station only) or 'dep' (away only)
+const TRACK_MODE = Object.fromEntries(CORR.map(c => [c.k, { W: 'both', E: 'both' }]));
+function routeAgainstMode(r) {
+  for (const [x, z] of r.cells) {
+    if (Math.abs(x) < 540) continue;
+    const c = CORR.find(c => Math.abs(c.z - z) < 0.3); if (!c) continue;
+    const side = x < 0 ? 'W' : 'E', m = TRACK_MODE[c.k][side]; if (m === 'both') continue;
+    const toward = (side === 'W' ? 1 : -1) === r.dir;
+    if ((m === 'arr' && !toward) || (m === 'dep' && toward)) return `track ${c.k} ${side === 'W' ? 'west' : 'east'} is set for ${m === 'arr' ? 'arrivals' : 'departures'} only`;
+  }
+  return null;
+}
+function cycleTrackMode(k, side) {
+  const m = TRACK_MODE[k], next = { both: 'arr', arr: 'dep', dep: 'both' }[m[side]]; m[side] = next;
+  log(`Main track ${k} (${side === 'W' ? 'west' : 'east'} side): ${next === 'both' ? 'both directions' : next === 'arr' ? 'ARRIVALS only' : 'DEPARTURES only'}`, 'warn'); beep(700);
+}
 function buildRoute(s) {
   const cap = s.kind === 'home' ? 3600 : s.kind === 'shunt' ? 900 : 1600;                // routes end at the next signal ahead; otherwise ~1.6 km out
   const d = s.dir, p0 = s.x * d, { legs } = predictFrom(s.track, p0, d, cap + 100);
@@ -2256,6 +2296,8 @@ function clickSignal(sig) {
   if (!sig.cleared) {
     if (sig.kind === 'home' && !sig.routeLine) { toast(`${sig.id}: the points lead nowhere — set a route first`); beep(180); return; }
     const r = buildRoute(sig);
+    const against = routeAgainstMode(r);
+    if (against) { toast(`${sig.id} refused: ${against}`); log(`${sig.id} refused — ${against}.`, 'bad'); beep(180); return; }
     const clash = routes.find(o => cellsHit(r.cells, o.cells));
     if (clash) { toast(`${sig.id} refused: route crosses the locked route of ${routeName(clash)}`); log(`${sig.id} refused — conflicts with the locked route of ${routeName(clash)}.`, 'bad'); beep(180); return; }
     // a shunt signal may lead onto an occupied line (to couple to a rake); main signals may not
@@ -2282,6 +2324,80 @@ function updateRoutes() {
   }
 }
 const lockedBy = id => routes.find(r => r.pts.has(id));
+
+// ---------- set a whole route in one go ----------
+// Arrival: points to the train's booked line (platform, loop, running line or yard), then every signal up to it cleared.
+// Departure: points out to a main track open for departures, then Starter + Advanced Starter (and shunt signals) cleared.
+function trainPath(t) { const c = t.curLeg; return predictFrom(c.za, t.p, t.dir, 3600, c.curve ? c : null); }
+const deadBefore = (legs, p) => legs.some(L => L.dead && L.p1 < p);
+function routeGoal(t) {
+  const arriving = t.p < -60 && !t.halted;
+  if (arriving) {
+    const T = t.expLine;
+    if (!T) return null;
+    if (YARD_LINES.includes(T)) return { arriving, name: lineName(T), stopAt: legs => { const hp = [-990, 1250].find(hp => hp > t.p && Z_LINE[Math.round(legZ(legs, hp))] === T && !deadBefore(legs, hp)); return hp ?? null; } };
+    return { arriving, name: LINE_PF[T] ? 'PF ' + LINE_PF[T] : lineName(T), stopAt: legs => Z_LINE[Math.round(legZ(legs, 0))] === T && !deadBefore(legs, 0) ? HALT_U : null };
+  }
+  const p = t.p + 2000, side = p * t.dir < 0 ? 'W' : 'E';
+  return { arriving, name: 'main line', stopAt: legs => { if (deadBefore(legs, p)) return null; const c = CORR.find(c => Math.abs(legZ(legs, p) - c.z) < 0.3); return c && TRACK_MODE[c.k][side] !== 'arr' ? t.p + 2600 : null; } };
+}
+// fewest point changes that make the train's path reach the goal (breadth-first over the facing points ahead)
+function findPointSet(t, goal) {
+  const orig = { ...POINTS }, queue = [[]], seen = new Set(['']); let found = null, n = 0;
+  while (queue.length && n++ < 3000) {
+    const flips = queue.shift();
+    Object.assign(POINTS, orig); for (const id of flips) POINTS[id] = POINTS[id] === 'N' ? 'R' : 'N';
+    const pr = trainPath(t), stop = goal.stopAt(pr.legs);
+    if (stop != null) { found = { flips, stop, legs: pr.legs }; break; }
+    if (flips.length >= 6) continue;
+    for (const f of pr.facing) {
+      const id = f.c.id; if (flips.includes(id) || f.c.fixed || lockedBy(id)) continue;
+      const nf = [...flips, id].sort(), key = nf.join(','); if (!seen.has(key)) { seen.add(key); queue.push(nf); }
+    }
+  }
+  if (found) {   // trailing points on the path must lie for it, or the train would run through them
+    const curves = new Set(found.legs.filter(L => L.curve).map(L => L.c.id));
+    for (const c of XOVERS) {
+      if (curves.has(c.id) || c.fixed) continue;
+      for (const [x, z] of [[c.x1, c.z1], [c.x2, c.z2]]) {
+        const p = x * t.dir; if (p <= t.p || p > found.stop) continue;
+        if (Math.abs(legZ(found.legs, p) - z) < 0.3 && POINTS[c.id] === 'R' && !found.flips.includes(c.id)) found.flips.push(c.id);
+      }
+    }
+  }
+  Object.assign(POINTS, orig);
+  return found;
+}
+function setTrainRoute(t) {
+  if (!state.running || t.stabled || t.crashed) return;
+  const goal = routeGoal(t);
+  if (!goal) { toast(`${t.number}: choose its line first`); beep(180); return; }
+  const f = findPointSet(t, goal);
+  if (!f) { toast(`${t.number}: no free route to ${goal.name} (points locked or tracks closed)`); log(`${t.number}: no free route to ${goal.name}.`, 'bad'); beep(180); return; }
+  for (const id of f.flips) togglePoint(id);
+  t.repredict(); refreshAspects();
+  if (goal.stopAt(trainPath(t).legs) == null) { toast(`${t.number}: could not set all the points (one is occupied or locked)`); beep(180); return; }
+  // clear every signal between the train and its stopping point, nearest first
+  t.repredict();
+  let s = nextSignalOf(t), guard = 0; const done = [];
+  while (s && guard++ < 10) {
+    if (s.x * t.dir >= f.stop) break;
+    if (!s.cleared) { clickSignal(s); if (!s.cleared) break; done.push(s.id); }
+    s = nextSignalAhead(s);
+  }
+  const pts = f.flips.length ? ` · points ${f.flips.map(id => id + POINTS[id]).join(', ')}` : '';
+  log(`🛤 ${t.number}: ${goal.arriving ? 'arrival' : 'departure'} route set to ${goal.name}${pts} · signals OFF: ${done.join(', ') || '—'}`, 'good');
+}
+// put back to ON every signal ahead of the train that is still OFF and not yet entered
+function cancelTrainRoute(t) {
+  const back = [];
+  for (const s of signals) {
+    if (!s.cleared || s.dir !== t.dir || s.x * t.dir <= t.p) continue;
+    if (Math.abs(legZ(t.pred.legs, s.x * t.dir) - s.track) > 0.8) continue;
+    clickSignal(s); back.push(s.id);
+  }
+  log(back.length ? `${t.number}: route cancelled — ${back.join(', ')} back to ON` : `${t.number}: no signals to put back`, 'warn');
+}
 function pointOccupiedBy(c) {
   for (const t of trains) {
     if (t.legs.some(L => L.curve && L.c === c && L.p1 > t.p - t.length - 2)) return t;
@@ -2343,7 +2459,7 @@ function trySpawn() {
   const r = Math.random(); const type = r < 0.42 ? 'express' : r < 0.75 ? 'passenger' : 'goods';
   const startU = state.first ? 2100 : 2600;
   for (const dir of Math.random() < 0.5 ? [1, -1] : [-1, 1]) {
-    const free = CORR.filter(c => corridorFree(c, dir));
+    const free = CORR.filter(c => corridorFree(c, dir) && TRACK_MODE[c.k][dir > 0 ? 'W' : 'E'] !== 'dep');
     if (!free.length) continue;
     const c = free[Math.floor(Math.random() * free.length)];
     const t = new Train(type, dir, c.z, startU); trains.push(t); state.first = false;
@@ -2475,7 +2591,7 @@ function cardFor(t) {
   if (el) return el;
   el = document.createElement('div'); el.className = 'tcard'; el.trainRef = t;
   el.innerHTML = `<div class="trow1"><span class="sdot"></span><span class="no"></span><span class="nm"></span><span class="tm"></span><span class="dly"></span><button class="more" data-act="more" title="More details">▼</button></div>
-    <div class="tctl"><button class="btn sm" data-act="view" title="Follow this train">🎥 View</button><button class="btn sm" data-act="cab" title="Ride in the loco cab">🚆</button><button class="btn sm sigb" data-act="sig"></button><button class="btn sm" data-act="stop" title="Order the driver to stop / go on">⏹ Stop</button><button class="btn sm" data-act="rev" title="Reverse: change ends and shunt back (set the points first) — e.g. back into a yard">⇄</button><button class="btn sm" data-act="cpl" title="Couple to the standing rake just ahead">🔗 Couple</button><button class="btn sm" data-act="ucpl" title="Uncouple the engine — the rake stays standing here">✂ Uncouple</button><span class="pfl" data-act="none" title="Expected platform / line"><select class="pfsel" data-act="none"></select></span></div>
+    <div class="tctl"><button class="btn sm" data-act="view" title="Follow this train">🎥 View</button><button class="btn sm" data-act="cab" title="Ride in the loco cab">🚆</button><button class="btn sm" data-act="route" title="Set the whole route in one go: points + all signals (arrival to the chosen line, or departure)">🛤 Route</button><button class="btn sm" data-act="unroute" title="Cancel: put this train's signals back to ON">✖</button><button class="btn sm sigb" data-act="sig"></button><button class="btn sm" data-act="stop" title="Order the driver to stop / go on">⏹ Stop</button><button class="btn sm" data-act="rev" title="Reverse: change ends and shunt back (set the points first) — e.g. back into a yard">⇄</button><button class="btn sm" data-act="cpl" title="Couple to the standing rake just ahead">🔗 Couple</button><button class="btn sm" data-act="ucpl" title="Uncouple the engine — the rake stays standing here">✂ Uncouple</button><span class="pfl" data-act="none" title="Expected platform / line"><select class="pfsel" data-act="none"></select></span></div>
     <div class="tpts"></div>
     <div class="tmore"><div class="tinfo"></div><div class="tstat"></div><div class="tsched"></div><div class="tdest"></div></div>`;
   const sel = el.querySelector('.pfsel');
@@ -2540,6 +2656,10 @@ function renderTrainList() {
     sb.style.display = ns ? '' : 'none';
     if (ns) { sb.dataset.sig = ns.id; sb.textContent = `🚦 ${ns.id} ${ns.cleared ? 'OFF' : 'ON'}`; sb.classList.toggle('off', ns.cleared); }
     el.querySelector('[data-act="cab"]').style.display = t.stabled ? 'none' : '';
+    const rtb = el.querySelector('[data-act="route"]'), urb = el.querySelector('[data-act="unroute"]');
+    rtb.style.display = t.stabled || t.crashed ? 'none' : '';
+    rtb.textContent = t.p < -60 && !t.halted ? '🛤 Route' : '🛤 Depart';
+    urb.style.display = !t.stabled && ns && ns.cleared ? '' : 'none';
     const stb = el.querySelector('[data-act="stop"]'), rvb = el.querySelector('[data-act="rev"]');
     stb.style.display = rvb.style.display = t.stabled || t.crashed ? 'none' : '';
     stb.textContent = t.stopReq ? '▶ Go' : '⏹ Stop'; stb.classList.toggle('on', !!t.stopReq);
@@ -2566,6 +2686,8 @@ $('trains').addEventListener('click', e => {
   const act = btn ? btn.dataset.act : 'view';
   if (act === 'none') return;
   if (act === 'more') { card.classList.toggle('open'); return; }
+  if (act === 'route') { setTrainRoute(t); renderTrainList(); return; }
+  if (act === 'unroute') { cancelTrainRoute(t); renderTrainList(); return; }
   if (act === 'pt') { togglePoint(btn.dataset.pt); renderTrainList(); return; }
   if (act === 'sig') { const s = signals.find(s => s.id === btn.dataset.sig); if (s) clickSignal(s); renderTrainList(); return; }
   if (act === 'stop') {
@@ -2611,7 +2733,7 @@ $('trains').addEventListener('change', e => {
 function makeWindow(el) {
   const head = el.querySelector('.winhead');
   head.addEventListener('pointerdown', e => {
-    if (e.target.closest('input,button')) return;
+    if (e.target.closest('input,button') || matchMedia('(max-width: 760px), (max-height: 500px)').matches) return;
     const r = el.getBoundingClientRect(), ox = e.clientX - r.left, oy = e.clientY - r.top;
     Object.assign(el.style, { left: r.left + 'px', top: r.top + 'px', right: 'auto', bottom: 'auto' });
     const mv = ev => { el.style.left = Math.max(-r.width + 80, Math.min(innerWidth - 80, ev.clientX - ox)) + 'px'; el.style.top = Math.max(0, Math.min(innerHeight - 30, ev.clientY - oy)) + 'px'; };
@@ -2622,6 +2744,17 @@ function makeWindow(el) {
   if (op) { const f = () => el.style.setProperty('--a', op.value / 100); op.addEventListener('input', f); f(); }
 }
 makeWindow($('panelwrap')); makeWindow($('side')); makeWindow($('diary'));
+// phones: the three windows share one bottom sheet; the tab bar picks which one shows
+const MOBILE = matchMedia('(max-width: 760px), (max-height: 500px)');
+let mobileTab = 'side';
+function applyMobile() {
+  document.documentElement.style.setProperty('--tbh', $('topbar').getBoundingClientRect().height + 'px');
+  for (const id of ['side', 'diary', 'panelwrap']) $(id).classList.toggle('mhide', MOBILE.matches && id !== mobileTab);
+  document.querySelectorAll('#mtabs .btn').forEach(b => b.classList.toggle('on', b.dataset.tab === mobileTab));
+  if (typeof sizePanel === 'function') requestAnimationFrame(sizePanel);
+}
+document.querySelectorAll('#mtabs .btn').forEach(b => b.addEventListener('click', () => { mobileTab = b.dataset.tab || null; applyMobile(); }));
+MOBILE.addEventListener('change', applyMobile); addEventListener('resize', applyMobile);
 
 // --- route relay panel (canvas): zoom / pan, transparent ---
 const pc = $('panel'), pctx = pc.getContext('2d');
@@ -2663,8 +2796,24 @@ function drawPanel() {
     g.lineWidth = c.fixed ? 3 : hov ? 4 : r ? 3.5 : 2; strokeFn(g, c.x1, c.x2, zf, 14);
   }
   g.font = 'bold 10px Segoe UI'; g.fillStyle = '#e6f2ea'; g.textAlign = 'left';
-  for (const c of CORR) { g.fillText(c.k, 4, PY(c.z) + 4); }
-  g.textAlign = 'right'; for (const c of CORR) g.fillText(c.k, PW - 4, PY(c.z) + 4);
+  for (const c of CORR) for (const side of ['W', 'E']) {
+    const m = TRACK_MODE[c.k][side], y = PY(c.z), towardE = side === 'W';
+    const dirE = m === 'arr' ? towardE : m === 'dep' ? !towardE : null;           // arrow direction along the track
+    const col = m === 'arr' ? '#35e27c' : m === 'dep' ? '#5ab4ff' : '#9aa7ae';
+    const [x0, w] = side === 'W' ? [2, 30] : [PW - 32, 30], hov = hover && hover.mode && hover.mode.k === c.k && hover.mode.side === side;
+    g.fillStyle = hov ? 'rgba(255,255,255,0.25)' : 'rgba(10,16,20,0.75)'; g.fillRect(x0, y - 6, w, 12);
+    g.strokeStyle = col; g.lineWidth = 1; g.strokeRect(x0 + 0.5, y - 5.5, w - 1, 11);
+    g.fillStyle = col; g.font = 'bold 9px Segoe UI'; g.textAlign = 'center';
+    g.fillText(c.k + ' ' + (dirE == null ? '⇄' : dirE ? '→' : '←'), x0 + w / 2, y + 3.5);
+    if (dirE != null) {                                                            // chevrons along that side's section
+      g.strokeStyle = col; g.lineWidth = 1.5;
+      for (let u = 700; u < TRACK_HALF - 100; u += 260) {
+        const X = PX((side === 'W' ? -1 : 1) * u), s = dirE ? 1 : -1; if (X < 36 || X > PW - 36) continue;
+        g.beginPath(); g.moveTo(X - s * 3, y - 3); g.lineTo(X + s * 2, y); g.lineTo(X - s * 3, y + 3); g.stroke();
+      }
+    }
+  }
+  g.font = 'bold 10px Segoe UI'; g.fillStyle = '#e6f2ea';
   for (const [n, z] of Object.entries(LINE_Z)) { g.textAlign = 'center'; g.fillStyle = '#9fd0b5'; if (+n === RUN_LINE) { g.textAlign = 'left'; g.fillText('RUNNING LINE', PX(-1600), PY(z) - 4); }
     else if (+n > 8) { const x0 = SEGS.find(sg => sg.z === z && sg.x0 > 0).x0; g.textAlign = 'right'; g.fillText(+n === GOODS_LINE ? 'GOODS' : 'Y' + (n - 8), PX(x0) - 4, PY(z) + 3); } else g.fillText('L' + n + (LINE_PF[n] ? ' PF' + LINE_PF[n] : ''), PX(-190), PY(z) - 3); }
   // locked routes in red
@@ -2730,6 +2879,11 @@ function panelHit(e) {
   const r = pc.getBoundingClientRect(), mx = e.clientX - r.left, my = e.clientY - r.top;
   const sig = signals.find(s => { const [x, y] = sigPos(s); return Math.hypot(mx - x, my - y) < 6; });
   if (sig) return { sig };
+  for (const c of CORR) {                                    // A–D pills at the panel edges: arrival / departure / both
+    if (Math.abs(my - PY(c.z)) > 6) continue;
+    if (mx >= 2 && mx <= 32) return { mode: { k: c.k, side: 'W' } };
+    if (mx >= PW - 32 && mx <= PW - 2) return { mode: { k: c.k, side: 'E' } };
+  }
   // a train under the pointer (its drawn body line)
   let tb = null, td = 7;
   for (const t of trains) {
@@ -2760,7 +2914,8 @@ pc.addEventListener('pointerup', e => {
     if (h && h.train) {                                   // select the train, as clicking its card does
       selected = h.train; if (camMode === 'follow') setView('follow');
       renderTrainList(); cards.get(h.train)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); beep(760);
-    } else if (h) { if (h.sig) clickSignal(h.sig); else togglePoint(h.pt); }
+    } else if (h && h.mode) { if (state.running) cycleTrackMode(h.mode.k, h.mode.side); }
+    else if (h) { if (h.sig) clickSignal(h.sig); else togglePoint(h.pt); }
   }
   pdrag = null;
 });
@@ -2774,6 +2929,8 @@ pc.addEventListener('wheel', e => {
 }, { passive: false });
 $('pzFit').addEventListener('click', () => { pv.zoom = 1; pv.pan = 0; });
 $('pzStation').addEventListener('click', () => { pv.zoom = 2.6; pv.pan = 0; });
+$('pzIn').addEventListener('click', () => { pv.zoom = Math.min(14, pv.zoom * 1.4); clampPan(); });
+$('pzOut').addEventListener('click', () => { pv.zoom = Math.max(1, pv.zoom / 1.4); clampPan(); });
 
 // 3D click on signals
 const ray = new THREE.Raycaster(), mouse = new THREE.Vector2();
@@ -2848,7 +3005,8 @@ $('sSave').addEventListener('click', () => {
 $('startBtn').addEventListener('click', () => {
   initAudio();
   $('intro').classList.add('hidden');
-  for (const id of ['topbar', 'views', 'side', 'diary', 'panelwrap']) $(id).classList.remove('hidden');
+  for (const id of ['topbar', 'views', 'side', 'diary', 'panelwrap', 'mtabs']) $(id).classList.remove('hidden');
+  applyMobile();
   sizePanel();
   controls.autoRotate = false; state.running = true;
   log(`Duty taken over at ${SN.short} (${SN.code}). All signals ON. · ड्यूटी शुरू — सभी सिगनल ऑन।`, 'good');
