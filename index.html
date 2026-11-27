@@ -1701,7 +1701,7 @@ function homeLeadsTo(s) {
 function refreshAspects() {
   for (const s of signals) {
     if (s.kind === 'home') s.routeLine = homeLeadsTo(s);
-    s.aspect = !s.cleared ? 0 : s.kind === 'starter' ? 2 : (s.routeLine && starterFor(s.routeLine, s.dir).cleared ? 2 : 1);
+    s.aspect = !s.cleared ? 0 : s.kind === 'starter' ? 2 : (s.routeLine && starterFor(s.routeLine, s.dir)?.cleared ? 2 : 1);
     s.lamps.forEach((l, i) => l.material.emissiveIntensity = (i === s.aspect ? 5 : 0));
     s.sprite.material.color.setHex(ASPECT_COL[s.aspect]);
     s.sprite.position.set(-0.32, s.lampY[s.aspect], 0);
@@ -2083,7 +2083,7 @@ class Train {
         if (s.aspect === 0) { state.score -= 150; log(`SPAD! ${this.number} passed ${s.id} at danger. −150`, 'bad'); toast(`SPAD — ${this.number} passed ${s.id} at danger!`); }
         if (s.kind === 'starter') log(`${this.number} ${this.name} departed from Line ${s.line}`, 'good');
         else { log(`${this.number} passed ${s.id} — heading for ${s.routeLine ? lineName(s.routeLine) : '?'}`); if (s.routeLine) announceArrival(this, s.routeLine); }
-        s.cleared = false; refreshAspects();
+        routeEntered(s, this); s.cleared = false; refreshAspects();
       }
     }
     // arrival at the station (centre) — compare with the booked platform
@@ -2143,13 +2143,65 @@ class Train {
 }
 
 // ---------- manual controls ----------
+// ---------- route locking (interlocking) ----------
+// Taking a signal OFF sets and LOCKS its route: the track from the signal to the next signal ahead (or ~1.6 km out),
+// with every point on it. A route is refused if it overlaps another locked route or a train stands on it.
+// Locked points cannot be thrown. Once the train passes the signal, the route stays locked behind it and is
+// released section by section as the train's tail clears it.
+const routes = [];
+function buildRoute(s) {
+  const cap = s.kind === 'home' ? 3600 : 1600;                // a home route runs to the far starter; a starter route ~1.6 km out
+  const d = s.dir, p0 = s.x * d, { legs } = predictFrom(s.track, p0, d, cap + 100);
+  let p1 = p0 + cap;
+  const dead = legs.find(L => L.dead); if (dead) p1 = Math.min(p1, dead.p1);
+  for (const o of signals) {                                   // next signal ahead on this path, same direction
+    if (o === s || o.dir !== d) continue;
+    const op = o.x * d; if (op <= p0 + 5 || op >= p1) continue;
+    if (Math.abs(legZ(legs, op) - o.track) < 0.8) p1 = op;
+  }
+  const r = { sig: s, train: null, dir: d, p0, p1, legs, cells: [], pts: new Set() };
+  refreshRoute(r); return r;
+}
+function refreshRoute(r) {
+  r.cells = []; for (let p = r.p0; p <= r.p1; p += 4) r.cells.push([p * r.dir, legZ(r.legs, p)]);
+  r.pts = new Set();
+  for (const c of XOVERS) for (const [x, z] of [[c.x1, c.z1], [c.x2, c.z2]]) {
+    const p = x * r.dir; if (p < r.p0 - 1 || p > r.p1 + 1) continue;
+    if (Math.abs(legZ(r.legs, p) - z) < 0.3) r.pts.add(c.id);
+  }
+}
+const cellsHit = (A, B) => A.some(([x, z]) => B.some(([x2, z2]) => Math.abs(x - x2) < 3 && Math.abs(z - z2) < 1.6));
+const routeName = r => r.sig ? r.sig.id : r.train ? r.train.number : '?';
 function clickSignal(sig) {
   if (!state.running) return;
-  sig.cleared = !sig.cleared;
-  refreshAspects();
-  if (sig.cleared) { log(`${sig.id} taken OFF${sig.kind === 'home' ? ` → Line ${sig.routeLine ?? '? (points lead nowhere)'}` : ''}`); beep(880); }
-  else { log(`${sig.id} put back to ON`, 'warn'); beep(520); }
+  if (!sig.cleared) {
+    if (sig.kind === 'home' && !sig.routeLine) { toast(`${sig.id}: the points lead nowhere — set a route first`); beep(180); return; }
+    const r = buildRoute(sig);
+    const clash = routes.find(o => cellsHit(r.cells, o.cells));
+    if (clash) { toast(`${sig.id} refused: route crosses the locked route of ${routeName(clash)}`); log(`${sig.id} refused — conflicts with the locked route of ${routeName(clash)}.`, 'bad'); beep(180); return; }
+    const occ = trains.find(t => !(t.dir === sig.dir && t.p < r.p0 + 2) && cellsHit(r.cells, t.bodyPoints(5)));
+    if (occ) { toast(`${sig.id} refused: route occupied by ${occ.number}`); log(`${sig.id} refused — ${occ.number} is standing on the route.`, 'bad'); beep(180); return; }
+    routes.push(r); sig.cleared = true; refreshAspects();
+    log(`${sig.id} taken OFF${sig.kind === 'home' ? ` → Line ${sig.routeLine}` : ''} · route locked (points ${[...r.pts].join(', ') || '—'})`); beep(880);
+  } else {
+    const i = routes.findIndex(r => r.sig === sig && !r.train); if (i >= 0) routes.splice(i, 1);
+    sig.cleared = false; refreshAspects(); log(`${sig.id} put back to ON · route released`, 'warn'); beep(520);
+  }
 }
+// a train passes its signal: the route now belongs to that train
+function routeEntered(s, t) { const r = routes.find(r => r.sig === s); if (r) { r.sig = null; r.train = t; } }
+// release the part of each route behind the train's tail
+function updateRoutes() {
+  for (let i = routes.length - 1; i >= 0; i--) {
+    const r = routes[i]; if (!r.train) continue;
+    const t = r.train;
+    if (!trains.includes(t) || t.crashed || t.dir !== r.dir) { routes.splice(i, 1); continue; }
+    const tailP = t.p - t.length - 2;
+    if (tailP >= r.p1) { routes.splice(i, 1); continue; }
+    if (tailP > r.p0 + 8) { r.p0 = tailP; refreshRoute(r); }
+  }
+}
+const lockedBy = id => routes.find(r => r.pts.has(id));
 function pointOccupiedBy(c) {
   for (const t of trains) {
     if (t.legs.some(L => L.curve && L.c === c && L.p1 > t.p - t.length - 2)) return t;
@@ -2162,6 +2214,8 @@ function pointOccupiedBy(c) {
 function togglePoint(id) {
   if (!state.running) return;
   const c = XO_BY_ID[id]; if (!c || c.fixed) return;
+  const lk = lockedBy(id);
+  if (lk) { toast(`Point ${id} is locked in the route of ${routeName(lk)}`); beep(180); return; }
   const occ = pointOccupiedBy(c);
   if (occ) { toast(`Point ${id} is occupied by ${occ.number}`); beep(180); return; }
   POINTS[id] = POINTS[id] === 'N' ? 'R' : 'N';
@@ -2275,6 +2329,7 @@ function simStep(h) {
   state.nextSpawn -= h;
   if (state.nextSpawn <= 0) state.nextSpawn = trySpawn() ? (40 + Math.random() * 40) * TRAFFIC : 8;
   for (const t of trains) t.update(h);
+  updateRoutes();
   checkCollisions();
   for (let i = trains.length - 1; i >= 0; i--) {
     const t = trains[i];
@@ -2532,6 +2587,13 @@ function drawPanel() {
   g.textAlign = 'right'; for (const c of CORR) g.fillText(c.k, PW - 4, PY(c.z) + 4);
   for (const [n, z] of Object.entries(LINE_Z)) { g.textAlign = 'center'; g.fillStyle = '#9fd0b5'; if (+n === RUN_LINE) { g.textAlign = 'left'; g.fillText('RUNNING LINE', PX(-1600), PY(z) - 4); }
     else if (+n > 8) { const x0 = SEGS.find(sg => sg.z === z && sg.x0 > 0).x0; g.textAlign = 'right'; g.fillText(+n === GOODS_LINE ? 'GOODS' : 'Y' + (n - 8), PX(x0) - 4, PY(z) + 3); } else g.fillText('L' + n + (LINE_PF[n] ? ' PF' + LINE_PF[n] : ''), PX(-190), PY(z) - 3); }
+  // locked routes in red
+  for (const r of routes) {
+    if (r.cells.length < 2) continue;
+    const path = () => { g.beginPath(); r.cells.forEach(([x, z], i) => i ? g.lineTo(PX(x), PY(z)) : g.moveTo(PX(x), PY(z))); };
+    g.strokeStyle = 'rgba(255,40,30,0.3)'; g.lineWidth = 12; path(); g.stroke();
+    g.strokeStyle = '#ff3b30'; g.lineWidth = 4; path(); g.stroke();
+  }
   // predicted paths (where each train will go with the points as set)
   for (const t of trains) {
     if (t.stabled || t.crashed || !t.pred.legs.length) continue;
@@ -2819,7 +2881,7 @@ const _v = new THREE.Vector3(), _v2 = new THREE.Vector3(), shTarget = new THREE.
 function frame() {
   requestAnimationFrame(frame);
   const dt = Math.min(0.1, clock.getDelta());
-  if (state.running && introFresh) { introFresh = false; for (const t of trains) t.dispose(); trains.length = 0; selected = null; state.nextSpawn = 3; for (const k in POINTS) POINTS[k] = 'N'; refreshAspects(); setupYards(); }
+  if (state.running && introFresh) { introFresh = false; for (const t of trains) t.dispose(); trains.length = 0; selected = null; state.nextSpawn = 3; for (const k in POINTS) POINTS[k] = 'N'; routes.length = 0; refreshAspects(); setupYards(); }
   const simDt = state.running ? dt * state.speed : (dt * 1);
   if (simDt > 0) {
     if (state.running) { const n = Math.ceil(simDt / 0.05); for (let i = 0; i < n; i++) simStep(simDt / n); }
