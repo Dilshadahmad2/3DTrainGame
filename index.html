@@ -650,9 +650,14 @@ const XOVERS = [], POINTS = {};
     [20, 750, 15, 810], [30, 830, 20, 910], [30, 940, 35, 1000], [20, 940, 15, 1000]];
   const ladder2 = [[15, 1100, 20, 1160], [20, 1190, 30, 1270], [30, 1300, 35, 1360],
     [20, 1420, 15, 1480], [30, 1440, 20, 1520], [35, 1450, 30, 1510]];
+  // inner crossovers between the platforms and the Home / Advanced Starter signals (530 m): scissors crossovers in three
+  // stages (A–B + C–D, then B–C, then A–B + C–D again) so any main track A–D can reach any other, in both directions
+  const inner = [[15, 440, 20, 500], [20, 440, 15, 500], [35, 440, 30, 500], [30, 440, 35, 500],
+    [20, 350, 30, 420], [30, 350, 20, 420],
+    [15, 210, 20, 270], [20, 210, 15, 270], [35, 210, 30, 270], [30, 210, 35, 270]];
   for (const [side, base] of [[-1, 100], [1, 200]]) {
     let n = base;
-    for (const [zi, ui, zo, uo] of [...fan, ...ladder1, ...ladder2]) {
+    for (const [zi, ui, zo, uo] of [...fan, ...ladder1, ...ladder2, ...inner]) {
       n++;
       const pA = { x: side * ui, z: zi }, pB = { x: side * uo, z: zo };
       const [P1, P2] = pA.x < pB.x ? [pA, pB] : [pB, pA];
