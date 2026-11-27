@@ -1657,7 +1657,31 @@ const ASPECT_COL = [0xff2a1a, 0xffc21a, 0x2aff5a];
 const digitMats = ['', '1', '2', '3', '4', '5', '6', '7', '8', 'Y1', 'Y2', 'Y3', 'G', 'RL'].map(d => new THREE.MeshBasicMaterial({ map: signTex(64, 64, '#060606', d ? [{ text: d, font: 'bold 50px Arial', color: '#fff6d8', y: 0.56 }] : [], null) }));
 const signals = [];
 const signalHits = [];
+// ground-level shunt signal: short post, round disc with a red (ON) and a white (OFF) lamp
+const shuntDisc = std(0xf1f1ec, { roughness: 0.5 });
+function buildShuntSignal(sig) {
+  const grp = new THREE.Group(), b = new Builder();
+  b.box(MAT.concreteDark, 0, 0.15, 0, 0.6, 0.3, 0.6);
+  b.cyl(MAT.darkMetal, 0, 0.6, 0, 0.06, 0.9);
+  b.add(new THREE.CylinderGeometry(0.32, 0.32, 0.06, 20), shuntDisc, M(-0.04, 1.15, 0, 0, 0, Math.PI / 2));
+  b.add(new THREE.CylinderGeometry(0.33, 0.33, 0.05, 20), MAT.black, M(0.0, 1.15, 0, 0, 0, Math.PI / 2));
+  grp.add(b.build());
+  const lampY = [1.15, 1.15, 1.15];
+  const lamps = [[0xff2a1a, 0.13], [0xffffff, -0.13]].map(([c, z]) => {
+    const m = new THREE.Mesh(new THREE.CircleGeometry(0.09, 16), new THREE.MeshStandardMaterial({ color: 0x111111, emissive: c, emissiveIntensity: 0 }));
+    m.position.set(-0.08, 1.15, z); m.rotation.y = -Math.PI / 2; grp.add(m); return m;
+  });
+  const spr = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, color: 0xff2a1a, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true }));
+  spr.scale.setScalar(0.9); grp.add(spr);
+  const plate = new THREE.Mesh(new THREE.PlaneGeometry(0.7, 0.22), new THREE.MeshBasicMaterial({ map: signTex(160, 48, '#f7d117', [{ text: sig.id, font: 'bold 30px Arial', y: 0.56 }]) }));
+  plate.position.set(-0.07, 0.55, 0); plate.rotation.y = -Math.PI / 2; grp.add(plate);
+  const hit = new THREE.Mesh(new THREE.BoxGeometry(1.4, 2, 1.4), new THREE.MeshBasicMaterial()); hit.position.y = 1; hit.visible = false; hit.userData.sig = sig; grp.add(hit); signalHits.push(hit);
+  grp.position.set(sig.x, 0, sig.z); grp.rotation.y = sig.dir > 0 ? 0 : Math.PI;
+  scene.add(grp);
+  sig.lamps = lamps; sig.sprite = spr; sig.lampY = lampY;
+}
 function buildSignal(sig) {
+  if (sig.kind === 'shunt') return buildShuntSignal(sig);
   const grp = new THREE.Group(), b = new Builder();
   b.box(MAT.concreteDark, 0, 0.2, 0, 0.9, 0.4, 0.9);
   b.cyl(postMat, 0, 2.5, 0, 0.09, 4.4);
@@ -1698,6 +1722,18 @@ for (const c of CORR) for (const dir of [1, -1]) {
 }
 for (let n = 1; n <= 8; n++) for (const dir of [1, -1])
   signals.push({ id: `S${n}${dir > 0 ? 'E' : 'W'}`, kind: 'starter', line: n, dir, track: LINE_Z[n], x: dir * STARTER_U, z: LINE_Z[n] - dir * 2.3, cleared: false, aspect: 0 });
+// shunt signals in the yard and on the goods running line (ON = red, OFF = white)
+for (const [id, x, track, dir] of [
+  ['SH1', 698, -14, -1],    // yard exit, west end (all yard lines lead out over Yard 1 here)
+  ['SH2', 1528, -14, 1],    // yard exit, east end, towards 308 and main track A
+  ['SH3', 605, -12, 1],     // running line into the yard
+  ['SH4', 1532, -14, -1],   // from main track A (308) into the yard
+  ['SH5', 445, -12, -1],    // running line westbound: into Line 1 (301) or round behind the station (312)
+  ['SH6', -445, -12, 1],    // running line eastbound: into Line 1 (401) or round behind the station (402)
+  ['SH7', -780, -12, -1],   // running line westbound: out to main track A at 310
+  ['SH8', -1270, -12, 1],   // running line eastbound: out to main track A at 311
+  ['SH9', -1560, -12, -1],  // running line westbound: joining main track A at 309
+]) signals.push({ id, kind: 'shunt', dir, track, x, z: track - dir * 1.9, cleared: false, aspect: 0 });
 signals.forEach(buildSignal);
 const starterFor = (line, dir) => signals.find(s => s.kind === 'starter' && s.line === line && s.dir === dir);
 // line a Home signal currently leads to, following the points as they lie
@@ -1722,9 +1758,9 @@ function refreshAspects() {
     if (s.kind === 'home') s.routeLine = homeLeadsTo(s);
     // green if the next signal is also OFF (or there is none in the station area), yellow if it is ON
     const nx = s.cleared ? nextSignalAhead(s) : null;
-    s.aspect = !s.cleared ? 0 : !nx || nx.cleared ? 2 : 1;
+    s.aspect = !s.cleared ? 0 : s.kind === 'shunt' ? 1 : !nx || nx.cleared ? 2 : 1;
     s.lamps.forEach((l, i) => l.material.emissiveIntensity = (i === s.aspect ? 5 : 0));
-    s.sprite.material.color.setHex(ASPECT_COL[s.aspect]);
+    s.sprite.material.color.setHex(s.kind === 'shunt' ? (s.aspect ? 0xffffff : 0xff2a1a) : ASPECT_COL[s.aspect]);
     s.sprite.position.set(-0.32, s.lampY[s.aspect], 0);
     if (s.indicator) s.indicator.material = digitMats[s.cleared && s.routeLine ? s.routeLine : 0];
   }
@@ -2103,6 +2139,7 @@ class Train {
         this.passed.add(s);
         if (s.aspect === 0) { state.score -= 150; log(`SPAD! ${this.number} passed ${s.id} at danger. −150`, 'bad'); toast(`SPAD — ${this.number} passed ${s.id} at danger!`); }
         if (s.kind === 'starter') log(`${this.number} ${this.name} departed from Line ${s.line}`, 'good');
+        else if (s.kind === 'shunt') log(`${this.number} passed shunt signal ${s.id}`);
         else if (s.kind === 'adv') log(`${this.number} passed advanced starter ${s.id} — out into the block section`);
         else if (s.outer) log(`${this.number} passed outer ${s.id}${s.routeLine ? ` — set for ${lineName(s.routeLine)}` : ''}`);
         else { log(`${this.number} passed home ${s.id} — heading for ${s.routeLine ? lineName(s.routeLine) : '?'}`); if (s.routeLine) announceArrival(this, s.routeLine); }
@@ -2173,7 +2210,7 @@ class Train {
 // released section by section as the train's tail clears it.
 const routes = [];
 function buildRoute(s) {
-  const cap = s.kind === 'home' ? 3600 : 1600;                // routes end at the next signal ahead; otherwise ~1.6 km out
+  const cap = s.kind === 'home' ? 3600 : s.kind === 'shunt' ? 900 : 1600;                // routes end at the next signal ahead; otherwise ~1.6 km out
   const d = s.dir, p0 = s.x * d, { legs } = predictFrom(s.track, p0, d, cap + 100);
   let p1 = p0 + cap;
   const dead = legs.find(L => L.dead); if (dead) p1 = Math.min(p1, dead.p1);
@@ -2202,7 +2239,8 @@ function clickSignal(sig) {
     const r = buildRoute(sig);
     const clash = routes.find(o => cellsHit(r.cells, o.cells));
     if (clash) { toast(`${sig.id} refused: route crosses the locked route of ${routeName(clash)}`); log(`${sig.id} refused — conflicts with the locked route of ${routeName(clash)}.`, 'bad'); beep(180); return; }
-    const occ = trains.find(t => !(t.dir === sig.dir && t.p < r.p0 + 2) && cellsHit(r.cells, t.bodyPoints(5)));
+    // a shunt signal may lead onto an occupied line (to couple to a rake); main signals may not
+    const occ = sig.kind === 'shunt' ? null : trains.find(t => !(t.dir === sig.dir && t.p < r.p0 + 2) && cellsHit(r.cells, t.bodyPoints(5)));
     if (occ) { toast(`${sig.id} refused: route occupied by ${occ.number}`); log(`${sig.id} refused — ${occ.number} is standing on the route.`, 'bad'); beep(180); return; }
     routes.push(r); sig.cleared = true; refreshAspects();
     log(`${sig.id} taken OFF${sig.kind === 'home' ? ` → Line ${sig.routeLine}` : ''} · route locked (points ${[...r.pts].join(', ') || '—'})`); beep(880);
@@ -2659,9 +2697,10 @@ function drawPanel() {
   // signals
   for (const s of signals) {
     const [x, y] = sigPos(s); if (x < -10 || x > PW + 10) continue;
-    const col = ['#ff2a1a', '#ffd21a', '#27e05a'][s.aspect];
+    const col = s.kind === 'shunt' ? (s.aspect ? '#ffffff' : '#ff2a1a') : ['#ff2a1a', '#ffd21a', '#27e05a'][s.aspect];
     g.fillStyle = col; g.shadowColor = col; g.shadowBlur = 8;
-    g.beginPath(); g.arc(x, y, s.kind === 'home' ? 6 : 5, 0, Math.PI * 2); g.fill(); g.shadowBlur = 0;
+    if (s.kind === 'shunt') { g.fillRect(x - 4, y - 4, 8, 8); g.shadowBlur = 0; g.strokeStyle = 'rgba(0,0,0,0.6)'; g.lineWidth = 1; g.strokeRect(x - 4, y - 4, 8, 8); }
+    else { g.beginPath(); g.arc(x, y, s.kind === 'home' ? 6 : 5, 0, Math.PI * 2); g.fill(); g.shadowBlur = 0; }
     if (hover && hover.sig === s) { g.strokeStyle = '#fff'; g.lineWidth = 2; g.beginPath(); g.arc(x, y, 9, 0, Math.PI * 2); g.stroke(); }
     g.fillStyle = '#eaf5ee'; g.font = '600 9px Segoe UI'; g.textAlign = s.dir > 0 ? 'right' : 'left';
     g.fillText(s.id + (s.kind === 'home' && s.routeLine ? `→${s.routeLine}` : ''), x + (s.dir > 0 ? -8 : 8), y + 3);
