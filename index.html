@@ -89,6 +89,11 @@ html,body{margin:0;height:100%;overflow:hidden;background:#000;font-family:'Sego
 .btn.sigb.off{background:#1f6b35}
 .tctl{display:flex;gap:4px;margin-top:5px;flex-wrap:wrap;align-items:center}
 .tdest{font-size:11px;color:#9fd0b5;margin-top:2px}
+.tprep{display:flex;align-items:center;gap:6px;margin-top:4px;font-size:10.5px;color:#d6e2e8}.tprep:empty{display:none}
+.tprep .bar{flex:0 0 46%;height:8px;border-radius:4px;background:rgba(255,255,255,0.12);overflow:hidden}
+.tprep .bar i{display:block;height:100%;width:0;background:linear-gradient(90deg,#ffb300,#ffd54f);border-radius:4px;transition:width .25s linear}
+.tprep.ready .bar i{background:#35e27c}.tprep.ready{color:#8fe89a;font-weight:600}
+.tprep span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .tpts{display:flex;gap:4px;flex-wrap:wrap;margin-top:4px;align-items:center}.tpts:empty{display:none}
 .tpts .lbl{font-size:10px;color:var(--mut)}
 .chip{font:inherit;font-size:10.5px;padding:2px 6px;border-radius:5px;border:1px solid rgba(200,210,215,0.35);background:rgba(255,255,255,0.06);color:#d6dee2;cursor:pointer}
@@ -2249,7 +2254,19 @@ class Train {
     else if (this.shunting && this.v > 0.2) this.status = `Shunting (reversed) · ${lineNow ? lineName(lineNow) : '—'} · ${Math.round(this.v * 3.6)} km/h`;
     this.sync();
   }
-  dispose() { for (const c of this.cars) scene.remove(c.obj); }
+  // departure preparation at the platform (or yard): fraction done + what is happening; null when nothing to show
+  prep() {
+    const pm = this._pm || (this._pm = {});
+    const part = (k, left, label) => { pm[k] = Math.max(pm[k] || 0, left); return { frac: pm[k] ? 1 - left / pm[k] : 1, left, label, ready: false }; };
+    if (this.stabled || this.crashed) return null;
+    if (this.terminated && this.turnT > 0) return part('turn', this.turnT, 'Rake cleaning · loco run-round');
+    if (this.yardT > 0) return part('yard', this.yardT, this.yardMsg || 'Yard work');
+    if (this.halted && !this.dwellDone) return part('dwell', this.dwell, this.job === 'unload' ? 'Unloading' : this.job === 'terminate' ? 'Passengers getting off' : this.job === 'originate' ? 'Boarding (originating)' : 'Boarding');
+    if (this.halted && this.dwellDone && !this.terminated && this.p > HALT_U - 40 && this.p < STARTER_U + 1)   // until it passes its Starter
+      return { frac: 1, left: 0, label: 'Ready to depart — 🛤 Depart', ready: true };
+    return null;
+  }
+  dispose() { for (const c of this.cars) scene.remove(c.obj); if (this.prepSpr) { scene.remove(this.prepSpr); this.prepSpr.material.map.dispose(); this.prepSpr.material.dispose(); } }
 }
 
 // ---------- manual controls ----------
@@ -2600,6 +2617,7 @@ function cardFor(t) {
   if (el) return el;
   el = document.createElement('div'); el.className = 'tcard'; el.trainRef = t;
   el.innerHTML = `<div class="trow1"><span class="sdot"></span><span class="no"></span><span class="nm"></span><span class="tm"></span><span class="dly"></span><button class="more" data-act="more" title="More details">▼</button></div>
+    <div class="tprep"></div>
     <div class="tctl"><button class="btn sm" data-act="view" title="Follow this train">🎥 View</button><button class="btn sm" data-act="cab" title="Ride in the loco cab">🚆</button><button class="btn sm" data-act="route" title="Set the whole route in one go: points + all signals (arrival to the chosen line, or departure)">🛤 Route</button><button class="btn sm" data-act="unroute" title="Cancel: put this train's signals back to ON">✖</button><button class="btn sm sigb" data-act="sig"></button><button class="btn sm" data-act="stop" title="Order the driver to stop / go on">⏹ Stop</button><button class="btn sm" data-act="rev" title="Reverse: change ends and shunt back (set the points first) — e.g. back into a yard">⇄</button><button class="btn sm" data-act="cpl" title="Couple to the standing rake just ahead">🔗 Couple</button><button class="btn sm" data-act="ucpl" title="Uncouple the engine — the rake stays standing here">✂ Uncouple</button><span class="pfl" data-act="none" title="Expected platform / line"><select class="pfsel" data-act="none"></select></span></div>
     <div class="tpts"></div>
     <div class="tmore"><div class="tinfo"></div><div class="tstat"></div><div class="tsched"></div><div class="tdest"></div></div>`;
@@ -2647,6 +2665,16 @@ function renderTrainList() {
       t.isEngine ? `${t.cfg.label} · ${t.dir > 0 ? 'facing East' : 'facing West'} · ${Math.round(t.v * 3.6)} km/h · ${t.front > 0 ? 'East' : 'West'} side` :
       `${t.cfg.label} · ${JOB_LABEL[t.job]} · ${t.dir > 0 ? 'W → E' : 'E → W'} · ${Math.round(t.v * 3.6)} km/h${t.delay > 1 ? ` · delay ${fmtDur(t.delay)}` : ''}`;
     const st = el.querySelector('.tstat'); st.textContent = t.status; st.className = 'tstat ' + t.statusCls;
+    { // departure preparation bar
+      const pb = el.querySelector('.tprep'), pr = t.prep();
+      if (!pr) { if (pb.innerHTML) pb.innerHTML = ''; }
+      else {
+        if (!pb.innerHTML) pb.innerHTML = '<div class="bar"><i></i></div><span></span>';
+        pb.classList.toggle('ready', pr.ready);
+        pb.querySelector('i').style.width = Math.round(pr.frac * 100) + '%';
+        pb.querySelector('span').textContent = pr.ready ? pr.label : `${pr.label} · ${Math.ceil(pr.left)} s`;
+      }
+    }
     const dest = t.stabled ? '' : t.dest ? `Points lead to → ${lineName(t.dest)} (${lineKind(t.dest)})` : (t.p < 0 ? 'Points lead to → no station line!' : '');
     el.querySelector('.tdest').textContent = dest;
     const sc = el.querySelector('.tsched');
@@ -2859,6 +2887,12 @@ function drawPanel() {
     g.font = 'bold 6.5px Segoe UI'; g.textAlign = 'center'; g.textBaseline = 'middle';
     g.fillStyle = isSel ? '#1a1205' : '#ffffff'; g.fillText(t.number, PX(mx), PY(mz) + 0.5);
     g.textBaseline = 'alphabetic';
+    const pr = t.prep();
+    if (pr) {   // departure preparation: small bar just above the train
+      const bw = 30, bx = PX(mx) - bw / 2, by = PY(mz) - 11;
+      g.fillStyle = 'rgba(0,0,0,0.6)'; g.fillRect(bx - 1, by - 1, bw + 2, 5);
+      g.fillStyle = pr.ready ? '#35e27c' : '#ffb300'; g.fillRect(bx, by, bw * pr.frac, 3);
+    }
   }
   // point number only on the crossover under the mouse (and on switched ones when zoomed in)
   const showNo = pv.zoom * (PW - 40) / (2 * MAPHALF) * 20 > 28;
@@ -3099,6 +3133,31 @@ const smoke = (() => {
   };
 })();
 
+// ---------- departure-preparation bar floating above a train standing at a platform ----------
+function updatePrepSprite(t) {
+  const pr = t.prep();
+  if (!pr) { if (t.prepSpr) t.prepSpr.visible = false; return; }
+  if (!t.prepSpr) {
+    const [c, g] = makeCanvas(256, 64), tex = toTex(c, { wrap: false });
+    const spr = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true, sizeAttenuation: false, fog: false }));
+    spr.scale.set(0.16, 0.04, 1); spr.renderOrder = 20; scene.add(spr);
+    t.prepSpr = spr; t.prepCtx = g; t.prepKey = '';
+  }
+  const key = Math.round(pr.frac * 100) + '|' + pr.ready + '|' + Math.ceil(pr.left);
+  if (key !== t.prepKey) {
+    t.prepKey = key; const g = t.prepCtx;
+    g.clearRect(0, 0, 256, 64);
+    g.fillStyle = 'rgba(8,14,18,0.82)'; g.beginPath(); g.roundRect(2, 2, 252, 60, 12); g.fill();
+    g.fillStyle = 'rgba(255,255,255,0.15)'; g.beginPath(); g.roundRect(12, 38, 232, 14, 7); g.fill();
+    g.fillStyle = pr.ready ? '#35e27c' : '#ffb300'; g.beginPath(); g.roundRect(12, 38, Math.max(14, 232 * pr.frac), 14, 7); g.fill();
+    g.fillStyle = pr.ready ? '#8fe89a' : '#ffffff'; g.font = 'bold 19px Segoe UI, Arial'; g.textAlign = 'left'; g.textBaseline = 'middle';
+    g.fillText(`${t.number} · ${pr.ready ? 'READY ✓' : pr.label.split(' · ')[0] + ' ' + Math.ceil(pr.left) + ' s'}`.slice(0, 26), 14, 21);
+    t.prepSpr.material.map.needsUpdate = true;
+  }
+  const mid = t.front - t.dir * t.length / 2;   // world x of the middle of the train
+  t.prepSpr.position.set(mid, 9, t.zOf(mid));
+  t.prepSpr.visible = !(camMode === 'driver' && t === selected);
+}
 // ---------- selected-train highlight in 3D: floating arrow + name tag + glowing outline along the train ----------
 const selMark = (() => {
   const g = new THREE.Group();
@@ -3182,6 +3241,7 @@ function frame() {
   }
   renderer.shadowMap.needsUpdate = (perf.n = (perf.n + 1) % perf.shEvery) === 0;
   for (const t of trains) if (t.headSprite) { t.headSprite.scale.setScalar(2.2 + lampLevel * 5); t.headSprite.visible = !(camMode === 'driver' && t === selected); }
+  for (const t of trains) updatePrepSprite(t);
   // UI
   uiT -= dt; panelT -= dt;
   if (state.running && uiT <= 0) {
